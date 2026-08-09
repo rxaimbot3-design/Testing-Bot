@@ -242,7 +242,7 @@ if (!process.env.GITHUB_WEBHOOK_SECRET) { console.warn("WARNING: GITHUB_WEBHOOK_
 
 const app = express();
 const parsedPort = parseInt(String(process.env.PORT).trim(), 10);
-const PORT = (!isNaN(parsedPort) && parsedPort > 0) ? parsedPort : 3000;
+const PORT = (!isNaN(parsedPort) && parsedPort !== 8080 && parsedPort > 0) ? parsedPort : 3000;
 
 // Enable trusted proxy model for accurate client IP resolution behind reverse proxy
 app.set("trust proxy", 1);
