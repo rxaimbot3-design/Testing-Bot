@@ -2182,7 +2182,7 @@ app.post("/api/gemini/chat", requireAdminAuth, aiRateLimit, async (req, res) => 
 
     // Create the chat session
     const chat = ai.chats.create({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
       config: {
         systemInstruction: 
           `You are the GOD AI Brain of the "EXCLUSIVE" Discord Server.
