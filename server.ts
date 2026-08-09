@@ -9,6 +9,7 @@ import fs from "fs";
 import zlib from "zlib";
 import os from "os";
 import dotenv from "dotenv";
+dotenv.config({ override: true });
 import crypto from "crypto";
 import { exec, execFile } from "child_process";
 import { promisify } from "util";
@@ -30,7 +31,7 @@ import { MusicTrack, GuildMusicState, getOrCreateGuildMusicState, getAudioStream
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
-dotenv.config();
+
 
 try {
   if (fs.existsSync("./discord_config.json")) {
