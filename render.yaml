@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: enterprise-discord-ai-bot
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

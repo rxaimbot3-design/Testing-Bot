@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+vault_salt.txt
+vault_tokens.json
+admin_sessions.json
+admin_whitelist.json
+ip_bans.json
+admin_secret.txt
+
