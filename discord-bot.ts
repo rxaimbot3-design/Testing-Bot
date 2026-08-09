@@ -1349,11 +1349,14 @@ async function fetchAuditLogWithRetry(guild: Guild, type: AuditLogEvent, targetI
   return null;
 }
 
+export const activeGuildAudits = new Set<string>();
+
 // Audit and Enforce Channel Permissions Matrix for Verification System & Verified Role
 export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customRoleName?: string) {
   const targetRoleName = customRoleName || verifiedRoleName;
   addBotLog(`Starting Zero Trust Verification & Channel Audit for server '${guild.name}' (Verified Role: '@${targetRoleName}')...`, "info");
 
+  activeGuildAudits.add(guild.id);
   try {
     let verifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === targetRoleName.toLowerCase());
     if (!verifiedRole) {
@@ -1580,8 +1583,10 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
     }
 
     addBotLog(`✅ Verification System Audit Complete for '${guild.name}': Public/Unlocked: ${unlockedChannels} | Locked VCs: ${lockedVCs} | Hidden Channels: ${hiddenChannels}`, "success");
+    activeGuildAudits.delete(guild.id);
     return { lockedVCs, unlockedChannels, hiddenChannels };
   } catch (err: any) {
+    activeGuildAudits.delete(guild.id);
     addBotLog(`Error auditing verification channel permissions: ${err.message}`, "error");
     throw err;
   }
@@ -5329,8 +5334,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
     client.on("channelUpdate", async (oldChannel, newChannel) => {
       if (!("guild" in newChannel) || !newChannel.guild) return;
       const guild = newChannel.guild;
-      
-      const isPanic = trackGuildActionAndCheckPanic(guild.id);
+      if (activeGuildAudits.has(guild.id)) return;
       
       try {
         let entry = await fetchAuditLogWithRetry(guild, AuditLogEvent.ChannelUpdate, newChannel.id, 1, 300);
@@ -5343,6 +5347,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
         const executorTag = executor ? (executor.tag || executor.username) : (executorId ? `<@${executorId}>` : "Unknown Admin");
 
         if (executorId && !isOwnerOrWhitelisted(executorId, guild)) {
+          const isPanic = trackGuildActionAndCheckPanic(guild.id);
           addBotLog(`🚨 [ZERO TRUST] Unauthorized channel update on #${newChannel.name} by ${executorTag}! Reverting...`, "error");
 
           if (!isPanic) {
@@ -5480,8 +5485,6 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
     });
 
     client.on("guildIntegrationsUpdate", async (guild) => {
-      const isPanic = trackGuildActionAndCheckPanic(guild.id);
-      
       // ALWAS scan for malicious apps immediately, regardless of who added them
       await OAuthMaliciousAppDetector.scanGuildIntegrations(guild, (msg) => {
         addBotLog(msg, "error");
@@ -5499,6 +5502,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
         const executorTag = executor ? (executor.tag || executor.username) : (executorId ? `<@${executorId}>` : "Unknown Admin");
 
         if (executorId && !isOwnerOrWhitelisted(executorId, guild)) {
+          const isPanic = trackGuildActionAndCheckPanic(guild.id);
           addBotLog(`🚨 [17MS ZERO TRUST] Unauthorized Integration/OAuth2 App added by ${executor.tag}! Neutralizing & Banning...`, "error");
           
           const execMember = await guild.members.fetch(executor.id).catch(() => null);
@@ -5917,7 +5921,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
       isStartingBot = false;
       return;
     }
-    await client.login(tokenToLogin);
+    console.log("LOGIN TOKEN ->" + tokenToLogin + "<-"); await client.login(tokenToLogin);
     isStartingBot = false;
   } catch (err: any) {
     const errMsg = err?.message || String(err);
