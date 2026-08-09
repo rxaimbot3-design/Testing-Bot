@@ -571,10 +571,14 @@ export class AIDeepScan {
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: `Analyze this message for Discord raid planning, social engineering, or severe toxic threat. Return ONLY a number from 0 to 100 representing threat level. Message: "${messageContent}"`,
-      });
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("AI scan timeout")), 15000));
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: `Analyze this message for Discord raid planning, social engineering, or severe toxic threat. Return ONLY a number from 0 to 100 representing threat level. Message: "${messageContent}"`,
+        }),
+        timeoutPromise
+      ]);
       const text = response.text || "0";
       const numberMatch = text.match(/\d+/);
       const score = numberMatch ? parseInt(numberMatch[0]) : 0;
@@ -713,10 +717,14 @@ Return ONLY a JSON object with this exact format:
 {"sentimentScore": <number from 0 to 100, 100 is extremely positive, 0 is extremely toxic/scam>, "isScam": <boolean>}
 Message: "${message.content}"`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: prompt,
-      });
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("AI sentiment scan timeout")), 15000));
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: prompt,
+        }),
+        timeoutPromise
+      ]);
 
       let text = response.text || "{}";
       const jsonMatch = text.match(/\{[\s\S]*?\}/);
@@ -724,7 +732,7 @@ Message: "${message.content}"`;
         text = jsonMatch[0];
       }
 
-      let result;
+      let result: { sentimentScore: number; isScam: boolean };
       try {
         result = JSON.parse(text);
       } catch (jsonErr) {
@@ -736,8 +744,8 @@ Message: "${message.content}"`;
           isScam: isScamMatch ? isScamMatch[1] === "true" : false
         };
       }
-      
-      const currentScore = this.serverScores.get(message.guild.id) || 100;
+    
+      const currentScore = this.serverScores.get(message.guild.id) ?? 100;
       let newScore = currentScore;
       
       if (result.isScam || result.sentimentScore < 20) {

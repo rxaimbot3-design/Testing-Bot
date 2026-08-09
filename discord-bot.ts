@@ -2687,7 +2687,8 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             return;
           }
           const appHost = getAppBaseUrl();
-          const trapLink = `${appHost}/api/honeypot-trap?guildId=${message.guild.id}&userId=${message.author.id}&trap=admin-passwords`;
+          const signedToken = CanaryToken.generateSignedToken(message.guild.id, "admin-passwords", message.author.id);
+          const trapLink = `${appHost}/api/honeypot-trap?guildId=${message.guild.id}&userId=${message.author.id}&trap=admin-passwords&token=${signedToken}`;
 
           await message.reply({
             embeds: [{
@@ -3623,7 +3624,8 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           return;
         }
         const appHost = getAppBaseUrl();
-        const trapLink = `${appHost}/api/honeypot-trap?guildId=${guild.id}&trap=admin-passwords`;
+        const signedToken = CanaryToken.generateSignedToken(guild.id, "admin-passwords", interaction.user.id);
+        const trapLink = `${appHost}/api/honeypot-trap?guildId=${guild.id}&trap=admin-passwords&token=${signedToken}`;
 
         await interaction.reply({
           embeds: [{
@@ -5097,22 +5099,6 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
         }
 
         // 7. ANTI CHANNEL DELETE / CREATE & ROLE DELETE / CREATE fallback for punishment
-        if (action === AuditLogEvent.ChannelDelete || action === AuditLogEvent.ChannelCreate || action === AuditLogEvent.RoleDelete || action === AuditLogEvent.RoleCreate) {
-          const executor = entry.executor || await client.users.fetch(executorId).catch(() => null);
-          const executorTag = executor ? (executor.tag || executor.username) : executorId;
-          if (executorId && isOwnerOrWhitelisted(executorId, targetGuild)) return;
-
-          if (executorId) {
-             const eventNameStr = action === AuditLogEvent.ChannelDelete ? "Channel Deletion" : 
-                                  action === AuditLogEvent.ChannelCreate ? "Channel Creation" :
-                                  action === AuditLogEvent.RoleDelete ? "Role Deletion" : "Role Creation";
-             
-             // Enforce punishment if not already enforced
-             try { IPBanSystem.banUser(executorId, `🚨 MAXIMUM THREAT PENALTY: Unauthorized ${eventNameStr}`); } catch (e: any) {}
-             await punishRogueAdmin(targetGuild, executorId, `🚨 MAXIMUM THREAT PENALTY: ${eventNameStr}`, `Target ID: ${entry.targetId}`);
-             checkNukerAttackThreshold(executorId, targetGuild.id, eventNameStr);
-          }
-        }
 
         // 10. ANTI GUILD UPDATE (<10MS WEBSOCKET REVERT)
         if (action === AuditLogEvent.GuildUpdate) {
@@ -5352,14 +5338,14 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
 
           if (!isPanic) {
              // Revert permissions and settings
-             if (oldChannel.type === newChannel.type && 'permissionOverwrites' in oldChannel && 'permissionOverwrites' in newChannel) {
-                 await (newChannel as any).edit({
-                     name: (oldChannel as any).name,
-                     topic: (oldChannel as any).topic,
-                     permissionOverwrites: (oldChannel as any).permissionOverwrites.cache,
-                     reason: "Zero Trust Anti-Nuke: Channel Update Revert"
-                 }).catch(() => {});
-             }
+              if (oldChannel.type === newChannel.type && 'permissionOverwrites' in oldChannel && 'permissionOverwrites' in newChannel) {
+                  await (newChannel as any).edit({
+                      name: (oldChannel as any).name,
+                      topic: (oldChannel as any).topic,
+                      permissionOverwrites: Array.from((oldChannel as any).permissionOverwrites.cache.values()),
+                      reason: "Zero Trust Anti-Nuke: Channel Update Revert"
+                  }).catch(() => {});
+              }
           }
 
           await punishRogueAdmin(guild, executorId, "Channel Update", `#${newChannel.name}`);
@@ -5503,9 +5489,9 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
 
         if (executorId && !isOwnerOrWhitelisted(executorId, guild)) {
           const isPanic = trackGuildActionAndCheckPanic(guild.id);
-          addBotLog(`🚨 [17MS ZERO TRUST] Unauthorized Integration/OAuth2 App added by ${executor.tag}! Neutralizing & Banning...`, "error");
+          addBotLog(`🚨 [17MS ZERO TRUST] Unauthorized Integration/OAuth2 App added by ${executorTag}! Neutralizing & Banning...`, "error");
           
-          const execMember = await guild.members.fetch(executor.id).catch(() => null);
+          const execMember = executorId ? await guild.members.fetch(executorId).catch(() => null) : null;
           if (execMember) {
             await execMember.ban({ reason: "Zero-Trust Strict Policy: Unauthorized Integration Addition (OAuth Bypass)" }).catch(() => {});
           }
@@ -5523,7 +5509,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
 
           await sendLiveAuditAlert(guild, {
             title: "🚨 UNAUTHORIZED INTEGRATION ADDED",
-            description: `**Rogue Admin:** <@${executor.id}> (${executor.tag})\n**Action Taken:** Integration deleted & Rogue Admin BANNED.`,
+            description: `**Rogue Admin:** ${executorTag}\n**Action Taken:** Integration deleted & Rogue Admin BANNED.`,
             color: 0xDC2626
           });
         }
@@ -5564,50 +5550,6 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
         }
       } catch (err: any) {
         addBotLog(`Error handling guildBanAdd event: ${err.message}`, "error");
-      }
-    });
-
-    // 16. Anti-Invite Link Monitor (Shield)
-    client.on("messageCreate", async (message) => {
-      if (!message.guild || message.author.bot) return;
-      if (!AntiInviteShield.isEnabled()) return;
-
-      // Exempt Owner and Whitelist
-      if (message.author.id === message.guild.ownerId || isOwnerOrWhitelisted(message.author.id, message.guild, false)) {
-        return;
-      }
-
-      const isLink = AntiInviteShield.containsInvite(message.content) || 
-                     /(https?:\/\/[^\s]+|discord\.gg\/[a-zA-Z0-9]+|discord\.com\/invite\/[a-zA-Z0-9]+|t\.me\/[a-zA-Z0-9_]+)/i.test(message.content);
-
-      if (isLink) {
-        try {
-          const violatorId = message.author.id;
-          const violatorTag = message.author.tag;
-          
-          addBotLog(`🚨 [LINK & SPAM SHIELD] User ${violatorTag} (${violatorId}) sent an unauthorized link/invite. Executing 1-hour TIMEOUT.`, "warning");
-          
-          // Delete violation message
-          await message.delete().catch(() => {});
-
-          // Execute 1-Hour Timeout ONLY (No Ban!)
-          if (message.member && message.member.moderatable) {
-            await message.member.timeout(60 * 60 * 1000, "Zero Trust Shield: Unauthorized link detected (Timeout policy enforced)").catch(() => {});
-          }
-
-          // Audit Alert
-          await sendLiveAuditAlert(message.guild, {
-            title: "🤐 LINK & SPAM PROTECTION: TIMEOUT APPLIED (1 HOUR)",
-            description: `🚨 **User placed on 1-Hour Timeout for sending a link!**\n\n` +
-                         `• **User:** <@${violatorId}> (${violatorTag})\n` +
-                         `• **User ID:** \`${violatorId}\`\n` +
-                         `• **Action Taken:** Message deleted and user placed on **1-Hour Timeout** (Muted).\n\n` +
-                         `*Note: As per system configuration, link & spam violations result ONLY in a timeout.*`,
-            color: 0xF59E0B
-          });
-        } catch (err: any) {
-          console.error("Error executing Anti-Link timeout:", err.message);
-        }
       }
     });
 
@@ -5875,17 +5817,6 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
       globalInvitesCache.get(guild.id)?.delete(invite.code);
     });
 
-    // 🔒 STRICT ANTI-DM PROTECTION: Ignore & Block direct message commands
-    client.on("messageCreate", async (message) => {
-      if (message.author.bot) return;
-      if (!message.guild || message.channel.type === ChannelType.DM) {
-        try {
-          await message.reply("⛔ **Direct Messages Disabled**: For Zero Trust Anti-Nuke Security reasons, DM commands and interactions are disabled for this bot. Please use commands directly inside your Discord server.").catch(() => {});
-        } catch (e) {}
-        return;
-      }
-    });
-
     client.on("error", (err) => {
       addBotLog(`Discord client error: ${err.message}`, "error");
       console.error("[Discord Client Error]", err);
@@ -5921,7 +5852,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
       isStartingBot = false;
       return;
     }
-    console.log("LOGIN TOKEN ->" + tokenToLogin + "<-"); await client.login(tokenToLogin);
+    console.log("LOGIN TOKEN ->[REDACTED]<-"); await client.login(tokenToLogin);
     isStartingBot = false;
   } catch (err: any) {
     const errMsg = err?.message || String(err);
