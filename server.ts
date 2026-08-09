@@ -1,4 +1,5 @@
 process.env.UV_THREADPOOL_SIZE = "128";
+process.env.NODE_ENV = process.env.NODE_ENV || "production";
 process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || "4";
 import express from "express";
 import cookieParser from "cookie-parser";
