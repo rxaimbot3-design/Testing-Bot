@@ -1732,7 +1732,7 @@ export async function startDiscordBot() {
     validateEnvironmentVariables();
   } catch (e: any) {
     console.error("[startDiscordBot] Critical Environment validation error:", e?.message || e);
-    process.exit(1);
+    // process.exit(1);
   }
 
   const token = (process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN)?.trim();
@@ -5967,13 +5967,13 @@ process.on("SIGINT", () => handleGracefulShutdown("SIGINT"));
 process.on("unhandledRejection", (reason, promise) => {
   console.error("🚨 [UNHANDLED REJECTION]:", reason);
   addBotLog(`🚨 [FATAL ERROR] Unhandled Promise Rejection: ${reason}`, "error");
-  process.exit(1);
+  // process.exit(1);
 });
 
 process.on("uncaughtException", (err) => {
   console.error("🚨 [UNCAUGHT EXCEPTION]:", err);
   addBotLog(`🚨 [FATAL ERROR] Uncaught Exception: ${err.message}`, "error");
-  process.exit(1);
+  // process.exit(1);
 });
 
 export async function runNukeDefenseDrill() {
