@@ -1,5 +1,3 @@
-[providers.node]
-node-version = "20.11.0"
 
 [phases.setup]
 nixPkgs = ["ffmpeg"]
