@@ -1,9 +1,11 @@
+[providers.node]
+nodeVersion = "20"
 
 [phases.setup]
 nixPkgs = ["ffmpeg"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["npm ci || npm install"]
 
 [phases.build]
 cmds = ["npm run build"]
