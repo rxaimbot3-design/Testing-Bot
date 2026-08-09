@@ -54,7 +54,7 @@ export function getAppBaseUrl(): string {
   if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL;
   if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL;
   if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
-  const port = 3000;
+  const port = process.env.PORT || 3000;
   return `http://localhost:${port}`;
 }
 

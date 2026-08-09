@@ -239,7 +239,8 @@ if (!process.env.GEMINI_API_KEY) { console.warn("WARNING: GEMINI_API_KEY missing
 if (!process.env.GITHUB_WEBHOOK_SECRET) { console.warn("WARNING: GITHUB_WEBHOOK_SECRET missing"); }
 
 const app = express();
-const PORT = 3000;
+const parsedPort = parseInt(String(process.env.PORT).trim(), 10);
+const PORT = (!isNaN(parsedPort) && parsedPort > 0) ? parsedPort : 3000;
 
 // Enable trusted proxy model for accurate client IP resolution behind reverse proxy
 app.set("trust proxy", 1);
@@ -1706,7 +1707,7 @@ try {
 }
 
 app.get("/api/github/status", requireAdminAuth, (req, res) => {
-  const port = 3000;
+  const port = process.env.PORT || 3000;
   const appUrl = process.env.APP_URL || process.env.PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`);
   const webhookUrl = `${appUrl}/api/github/webhook`;
   res.json({
