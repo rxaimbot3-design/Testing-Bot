@@ -241,8 +241,7 @@ if (!process.env.GEMINI_API_KEY) { console.warn("WARNING: GEMINI_API_KEY missing
 if (!process.env.GITHUB_WEBHOOK_SECRET) { console.warn("WARNING: GITHUB_WEBHOOK_SECRET missing"); }
 
 const app = express();
-const parsedPort = parseInt(String(process.env.PORT).trim(), 10);
-const PORT = (!isNaN(parsedPort) && parsedPort !== 8080 && parsedPort > 0) ? parsedPort : 3000;
+const PORT = process.env.APPLET_ID ? 3000 : parseInt(String(process.env.PORT || 3000), 10);
 
 // Enable trusted proxy model for accurate client IP resolution behind reverse proxy
 app.set("trust proxy", 1);
