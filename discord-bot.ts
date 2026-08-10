@@ -2755,7 +2755,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           try {
             for (const r of latest.roles) {
               if (!message.guild.roles.cache.find(gr => gr.name === r.name)) {
-                await message.guild.roles.create({ name: r.name, color: r.color, permissions: BigInt(r.permissions), reason: "1-Click Recovery" }).catch(() => {});
+                await message.guild.roles.create({ name: r.name, color: r.color, permissions: BigInt(r.permissions.bitfield), reason: "1-Click Recovery" }).catch(() => {});
                 rolesRestoredCount++;
               }
             }
@@ -4186,7 +4186,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             if (target === "roles" || target === "all") {
                for (const r of latest.roles) {
                    if (!guild.roles.cache.has(r.id) && !guild.roles.cache.find(gr => gr.name === r.name)) {
-                       await guild.roles.create({ name: r.name, color: r.color, permissions: BigInt(r.permissions), reason: "Selective Restore" }).catch(() => {});
+                        await guild.roles.create({ name: r.name, color: r.color, permissions: BigInt(r.permissions.bitfield), reason: "Selective Restore" }).catch(() => {});
                    }
                }
             }
@@ -4225,7 +4225,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
            // 1. Recreate missing roles
            for (const r of latest.roles) {
                if (!guild.roles.cache.find(gr => gr.name === r.name)) {
-                   await guild.roles.create({ name: r.name, color: r.color, permissions: BigInt(r.permissions), reason: "1-Click Server Recovery" }).catch(() => {});
+                    await guild.roles.create({ name: r.name, color: r.color, permissions: BigInt(r.permissions.bitfield), reason: "1-Click Server Recovery" }).catch(() => {});
                    rolesRestoredCount++;
                }
            }

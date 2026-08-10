@@ -5,7 +5,7 @@ nodeVersion = "20"
 nixPkgs = ["ffmpeg"]
 
 [phases.install]
-cmds = ["npm ci || npm install"]
+cmds = ["npm ci --no-audit --no-fund || npm install --no-audit --no-fund"]
 
 [phases.build]
 cmds = ["npm run build"]
