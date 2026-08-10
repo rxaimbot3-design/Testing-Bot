@@ -317,7 +317,7 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,
 }));
-const allowedOrigin = process.env.ALLOWED_ORIGIN || process.env.APP_URL || "http://localhost:3000";
+const allowedOrigin = process.env.ALLOWED_ORIGIN || process.env.APP_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : true);
 app.use(cors({ origin: allowedOrigin, credentials: true }));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -452,6 +452,7 @@ function createZipArchiveBuffer(baseDir: string): Buffer {
         relPath.startsWith("node_modules") ||
         relPath.startsWith(".git") ||
         relPath.startsWith("dist") ||
+        relPath.startsWith("server-build") ||
         relPath.startsWith("snapshots") ||
         relPath.startsWith("backups") ||
         relPath === ".env" ||
@@ -2441,4 +2442,7 @@ async function setupServer() {
   });
 }
 
-setupServer();
+setupServer().catch((err) => {
+  console.error("Failed to setup server:", err);
+  process.exit(1);
+});

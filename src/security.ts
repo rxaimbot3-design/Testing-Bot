@@ -52,6 +52,7 @@ export async function runBackupIntegrityTest(): Promise<{ passed: boolean; steps
     const fs = await import("fs");
     const path = await import("path");
     const testPath = path.join(process.cwd(), "backups", "integrity_test.json");
+    fs.mkdirSync(path.dirname(testPath), { recursive: true });
     fs.writeFileSync(testPath, JSON.stringify(testBackup));
     steps.push("Backup created successfully.");
 

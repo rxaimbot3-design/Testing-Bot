@@ -5927,7 +5927,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
       isStartingBot = false;
       return;
     }
-    console.log("LOGIN TOKEN ->" + tokenToLogin + "<-"); await client.login(tokenToLogin);
+    console.log("Attempting Discord bot login..."); await client.login(tokenToLogin);
     isStartingBot = false;
   } catch (err: any) {
     const errMsg = err?.message || String(err);
@@ -5943,32 +5943,8 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
   }
 }
 
-// Function to simulate 100 Nukers Simultaneous Attack for Live Dashboard Testing
-// --- GLOBAL ERROR HANDLING & GRACEFUL SHUTDOWN (PREVENT CRASHES & CORRUPTION) ---
-let isShuttingDown = false;
-async function handleGracefulShutdown(signal: string) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-  console.log(`\n🛑 [GRACEFUL SHUTDOWN] Received ${signal}. Cleaning up connections & state...`);
-  addBotLog(`🛑 [SHUTDOWN] Bot received ${signal}. Executing graceful termination...`, "warning");
-  botStatus = "offline";
-
-  if (presenceRotatorInterval) clearInterval(presenceRotatorInterval);
-
-  if (clientInstance) {
-    try {
-      await clientInstance.destroy();
-      console.log("✅ Discord client connection destroyed safely.");
-    } catch (err: any) {
-      console.error("Error destroying Discord client during shutdown:", err.message);
-    }
-    clientInstance = null;
-  }
-  process.exit(0);
-}
-
-process.on("SIGTERM", () => handleGracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => handleGracefulShutdown("SIGINT"));
+// Note: Graceful shutdown is handled by server.ts to ensure admin sessions
+// are saved and the Discord bot is stopped cleanly.
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("🚨 [UNHANDLED REJECTION]:", reason);
