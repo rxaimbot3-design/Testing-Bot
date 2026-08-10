@@ -12,7 +12,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --legacy-peer-deps || npm install --no-audit --no-fund --legacy-peer-deps
 
 # Copy source code
 COPY . .
