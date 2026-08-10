@@ -124,7 +124,7 @@ export interface BotStatusInfo {
 }
 
 export interface SecurityStats {
-  blockedAttacks: number;
+  blockedAttacksCount: number;
   quarantinedUsers: number;
   backupCount: number;
   ipBansCount: number;

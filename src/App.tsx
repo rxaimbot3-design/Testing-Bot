@@ -133,6 +133,9 @@ export default function App() {
   useEffect(() => {
     checkSession().then(res => {
       setAdminAuthenticated(res.authenticated);
+      if (res.authenticated) {
+        setIsAuthenticated(true);
+      }
     });
 
     const handleUnauthorized = (e: Event) => {
@@ -577,7 +580,7 @@ export default function App() {
                   onToggleLockdown={handleToggleLockdown} 
                   logs={auditLogs}
                   onRefreshLogs={() => handleAddLog('Refreshed cluster telemetry logs', 'low')}
-                  isOwner={discordUser?.username === 'rxaimbot3'}
+                  isOwner={isAuthenticated}
                 />
               )}
 
@@ -604,7 +607,7 @@ export default function App() {
                   onSimulateRaid={handleSimulateRaid}
                   serverStatus={server.status}
                   onToggleLockdown={handleToggleLockdown}
-                  isOwner={discordUser?.username === 'rxaimbot3'}
+                  isOwner={isAuthenticated}
                 />
               )}
 
