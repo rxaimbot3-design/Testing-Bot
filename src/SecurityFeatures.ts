@@ -35,11 +35,19 @@ export function atomicWriteJsonSync(filePath: string, data: any) {
 // 1. Token Vault - Encrypts the token in memory with AES-256-GCM & Disk Persistence
 export class TokenVault {
   private static encryptedTokens: Map<string, { encrypted: string; iv: string; authTag: string }> = new Map();
-  private static masterSecret = process.env.ADMIN_SECRET || crypto.randomBytes(32).toString("hex");
+  private static masterSecret: string;
   private static isCompromised = false;
   private static vaultFile = path.join(process.cwd(), "vault_tokens.json");
   private static saltFile = path.join(process.cwd(), "vault_salt.txt");
   private static cachedSalt: string | null = null;
+
+  static {
+    const secret = process.env.ADMIN_SECRET?.trim();
+    if (!secret || secret.length < 32) {
+      throw new Error("ADMIN_SECRET must be set and at least 32 characters long for TokenVault operation.");
+    }
+    TokenVault.masterSecret = secret;
+  }
 
   private static getSalt(): string {
     if (this.cachedSalt) return this.cachedSalt;
@@ -1314,7 +1322,15 @@ export class MongoRedisEngine {
 
 // 35. Premium License & HWID Fingerprint System
 export class PremiumLicenseSystem {
-  private static SECRET_SEED = process.env.LICENSE_SECRET_SEED || crypto.randomBytes(32).toString('hex');
+  private static SECRET_SEED: string;
+  
+  static {
+    const seed = process.env.LICENSE_SECRET_SEED?.trim();
+    if (!seed || seed.length < 32) {
+      throw new Error("LICENSE_SECRET_SEED must be set and at least 32 characters long for PremiumLicenseSystem operation.");
+    }
+    PremiumLicenseSystem.SECRET_SEED = seed;
+  }
   
   static computeChecksum(keyBody: string): string {
     const hash = crypto.createHmac("sha256", this.SECRET_SEED).update(keyBody.toUpperCase()).digest("hex");

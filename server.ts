@@ -2103,7 +2103,7 @@ app.post("/api/github/push", requireAdminAuth, async (req, res) => {
     await execFileAsync("git", ["add", "-A"]);
     
     // Safety check: ensure sensitive files are not pushed
-    const sensitiveFiles = ["admin_secret.txt", "admin_sessions.json", "discord_config.json", "github_config.json", "logs.json", "stats.json", "guild_music_state.json", "admin_auth.json"];
+    const sensitiveFiles = ["admin_sessions.json", "discord_config.json", "github_config.json", "logs.json", "stats.json", "guild_music_state.json", "admin_auth.json"];
     for (const file of sensitiveFiles) {
       try {
         await execFileAsync("git", ["reset", "--", file]);

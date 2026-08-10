@@ -1728,12 +1728,7 @@ safeSetInterval(() => {
 }, 300000); // Every 5 minutes
 
 export async function startDiscordBot() {
-  try {
-    validateEnvironmentVariables();
-  } catch (e: any) {
-    console.error("[startDiscordBot] Critical Environment validation error:", e?.message || e);
-    // process.exit(1);
-  }
+  validateEnvironmentVariables();
 
   const token = (process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN)?.trim();
   if (token) TokenVault.store(token, "DISCORD_TOKEN");
@@ -5932,12 +5927,12 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
     }
     if (!tokenToLogin || tokenToLogin.length < 50 || tokenToLogin.includes("placeholder") || tokenToLogin.includes("your_token")) {
       addBotLog("Discord Bot offline: Invalid or placeholder token provided.", "warning");
-      botStatus = "offline";
-      isStartingBot = false;
-      return;
-    }
-    console.log("LOGIN TOKEN ->" + tokenToLogin + "<-"); await client.login(tokenToLogin);
-    isStartingBot = false;
+       botStatus = "offline";
+       isStartingBot = false;
+       return;
+     }
+     await client.login(tokenToLogin);
+     isStartingBot = false;
   } catch (err: any) {
     const errMsg = err?.message || String(err);
     if (errMsg.includes("TokenInvalid") || errMsg.includes("invalid token") || errMsg.includes("An invalid token was provided")) {
@@ -5951,20 +5946,6 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
     isStartingBot = false;
   }
 }
-
-// --- GLOBAL ERROR HANDLING (PREVENT CRASHES & CORRUPTION) ---
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("🚨 [UNHANDLED REJECTION]:", reason);
-  addBotLog(`🚨 [FATAL ERROR] Unhandled Promise Rejection: ${reason}`, "error");
-  // process.exit(1);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("🚨 [UNCAUGHT EXCEPTION]:", err);
-  addBotLog(`🚨 [FATAL ERROR] Uncaught Exception: ${err.message}`, "error");
-  // process.exit(1);
-});
 
 export async function runNukeDefenseDrill() {
   const startTime = Date.now();
