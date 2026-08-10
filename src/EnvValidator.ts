@@ -18,10 +18,10 @@ export function validateEnvironmentVariables(): EnvValidationResult {
 
   const adminSecret = process.env.ADMIN_SECRET?.trim();
   if (!adminSecret) {
-    missingOptional.push('ADMIN_SECRET'); process.env.ADMIN_SECRET = process.env.ADMIN_SECRET || "default_insecure_admin_secret_generated_for_safety_do_not_use";
+    missingRequired.push('ADMIN_SECRET');
     warnings.push('❌ Critical Error: ADMIN_SECRET is required and must be configured in environment.');
   } else if (adminSecret.length < 32) {
-    missingOptional.push('ADMIN_SECRET'); process.env.ADMIN_SECRET = process.env.ADMIN_SECRET || "default_insecure_admin_secret_generated_for_safety_do_not_use";
+    missingRequired.push('ADMIN_SECRET');
     warnings.push('❌ Critical Error: ADMIN_SECRET must be at least 32 characters long for enterprise security.');
   }
 

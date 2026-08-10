@@ -29,6 +29,7 @@ import { CppNativeEngine } from "./src/CppEngine.js";
 import { validateEnvironmentVariables } from "./src/EnvValidator.js";
 import { playAudioInGuild, stopAudioInGuild, pauseAudioInGuild, resumeAudioInGuild, setVolumeInGuild } from "./src/services/VoiceService.js";
 import { MusicTrack, GuildMusicState, getOrCreateGuildMusicState, getAudioStreamDetails } from "./src/services/MusicManager.js";
+import { hashToken, scanForSecrets, validateInput, runBackupIntegrityTest } from "./src/security.js";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -50,28 +51,8 @@ try {
 }
 
 if (!process.env.ADMIN_SECRET || process.env.ADMIN_SECRET.trim().length < 32) {
-  const secretFile = path.join(process.cwd(), "admin_secret.txt");
-  let savedSecret = "";
-  try {
-    if (fs.existsSync(secretFile)) {
-      savedSecret = fs.readFileSync(secretFile, "utf8").trim();
-      if (savedSecret.startsWith('"') && savedSecret.endsWith('"')) {
-        savedSecret = savedSecret.slice(1, -1);
-      }
-    }
-  } catch {}
-
-  if (savedSecret && savedSecret.length >= 32) {
-    process.env.ADMIN_SECRET = savedSecret;
-    console.log("🔐 [SECURITY Vault] Loaded 32-byte ADMIN_SECRET from local vault storage.");
-  } else {
-    const newSecret = crypto.randomBytes(32).toString("hex");
-    process.env.ADMIN_SECRET = newSecret;
-    try {
-      atomicWriteJsonSync(secretFile, newSecret);
-    } catch {}
-    console.log("🔐 [SECURITY Vault] Auto-generated strong 32-byte ADMIN_SECRET for system session.");
-  }
+  console.error("❌ Critical Security Error: ADMIN_SECRET is missing or too short. Set a secure 32+ character ADMIN_SECRET in your environment and restart.");
+  process.exit(1);
 }
 
 validateEnvironmentVariables();
@@ -119,8 +100,51 @@ export function redactSecrets(text: string): string {
     .replace(/("adminKey"|"password"|"secret"|"admin_key")\s*:\s*"[^"]+"/gi, '$1:"***REDACTED***"');
 }
 
-// Active Admin Sessions Store (With Disk Persistence)
-const activeAdminSessions = new Map<string, { username: string; createdAt: number; expiresAt: number }>();
+// Structured Logging Utility
+interface LogContext {
+  timestamp?: string;
+  guildId?: string;
+  event?: string;
+  severity?: "info" | "warning" | "error" | "critical";
+  userId?: string;
+  ip?: string;
+  details?: any;
+}
+
+export function structuredLog(context: LogContext, message: string) {
+  const entry = {
+    timestamp: context.timestamp || new Date().toISOString(),
+    severity: context.severity || "info",
+    event: context.event || "general",
+    guildId: context.guildId,
+    userId: context.userId,
+    ip: context.ip,
+    message,
+    details: context.details ? redactSecrets(JSON.stringify(context.details)) : undefined
+  };
+  console.log(JSON.stringify(entry));
+}
+
+// Session Replay Protection (short-lived token nonce tracking)
+const recentlyUsedTokens = new Map<string, number>();
+
+function checkSessionReplay(token: string): boolean {
+  const tokenHash = hashToken(token);
+  const now = Date.now();
+  const lastUsed = recentlyUsedTokens.get(tokenHash);
+  if (lastUsed && now - lastUsed < 5000) {
+    return true; // Replay detected within 5s window
+  }
+  recentlyUsedTokens.set(tokenHash, now);
+  // Prune old entries
+  for (const [hash, ts] of recentlyUsedTokens.entries()) {
+    if (now - ts > 300000) recentlyUsedTokens.delete(hash);
+  }
+  return false;
+}
+
+// Active Admin Sessions Store (With Disk Persistence - Hashed Tokens)
+const activeAdminSessions = new Map<string, { username: string; createdAt: number; expiresAt: number; tokenHash: string }>();
 const SESSIONS_FILE = path.join(process.cwd(), "admin_sessions.json");
 
 function loadAdminSessions() {
@@ -130,8 +154,8 @@ function loadAdminSessions() {
       const now = Date.now();
       if (Array.isArray(data)) {
         for (const item of data) {
-          if (item.token && item.expiresAt > now) {
-            activeAdminSessions.set(item.token, { username: item.username, createdAt: item.createdAt, expiresAt: item.expiresAt });
+          if (item.tokenHash && item.expiresAt > now) {
+            activeAdminSessions.set(item.tokenHash, { username: item.username, createdAt: item.createdAt, expiresAt: item.expiresAt, tokenHash: item.tokenHash });
           }
         }
       }
@@ -143,11 +167,31 @@ function loadAdminSessions() {
 
 function saveAdminSessions() {
   try {
-    const list = Array.from(activeAdminSessions.entries()).map(([token, sess]) => ({ token, ...sess }));
+    const list = Array.from(activeAdminSessions.values()).map(sess => ({ tokenHash: sess.tokenHash, username: sess.username, createdAt: sess.createdAt, expiresAt: sess.expiresAt }));
     atomicWriteJsonSync(SESSIONS_FILE, list);
   } catch (err) {
     console.error("Failed to save admin sessions to disk:", err);
   }
+}
+
+function createAdminSession(username: string): { token: string; expiresAt: number } {
+  const token = "session_" + crypto.randomBytes(32).toString("hex");
+  const tokenHash = hashToken(token);
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  activeAdminSessions.set(tokenHash, { username, createdAt: Date.now(), expiresAt, tokenHash });
+  saveAdminSessions();
+  return { token, expiresAt };
+}
+
+function revokeAdminSessionByToken(token: string) {
+  if (!token) return false;
+  const tokenHash = hashToken(token);
+  return activeAdminSessions.delete(tokenHash);
+}
+
+function revokeAllAdminSessions() {
+  activeAdminSessions.clear();
+  saveAdminSessions();
 }
 
 loadAdminSessions();
@@ -156,9 +200,9 @@ loadAdminSessions();
 setInterval(() => {
   const now = Date.now();
   let changed = false;
-  for (const [token, session] of activeAdminSessions.entries()) {
+  for (const [tokenHash, session] of activeAdminSessions.entries()) {
     if (session.expiresAt <= now) {
-      activeAdminSessions.delete(token);
+      activeAdminSessions.delete(tokenHash);
       changed = true;
     }
   }
@@ -173,22 +217,30 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
 
     const tokenStr = authHeader.replace(/^Bearer\s+/i, "").trim() || cookieToken;
 
+    if (!tokenStr) {
+      return res.status(401).json({ success: false, error: `Unauthorized: Valid authentication token or secret key is required.` });
+    }
+
     // Direct ADMIN_SECRET match
     if (tokenStr && validSecret && tokenStr.length === validSecret.length && crypto.timingSafeEqual(Buffer.from(tokenStr), Buffer.from(validSecret))) {
       return next();
     }
 
-    // Active Session Token match
-    if (tokenStr) {
-      const session = activeAdminSessions.get(tokenStr);
-      if (session) {
-        if (Date.now() > session.expiresAt) {
-          activeAdminSessions.delete(tokenStr);
-          saveAdminSessions();
-          return res.status(401).json({ success: false, error: "Unauthorized: Session token has expired." });
-        }
-        return next();
+    // Replay protection for session tokens
+    if (checkSessionReplay(tokenStr)) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Session token replay detected." });
+    }
+
+    // Active Session Token match (hashed lookup)
+    const tokenHash = hashToken(tokenStr);
+    const session = activeAdminSessions.get(tokenHash);
+    if (session) {
+      if (Date.now() > session.expiresAt) {
+        activeAdminSessions.delete(tokenHash);
+        saveAdminSessions();
+        return res.status(401).json({ success: false, error: "Unauthorized: Session token has expired." });
       }
+      return next();
     }
 
     return res.status(401).json({ success: false, error: `Unauthorized: Valid authentication token or secret key is required.` });
@@ -249,10 +301,24 @@ app.set("trust proxy", 1);
 
 // Security Middleware (Helmet, CORS, Rate Limiting)
 app.use(helmet({
-  contentSecurityPolicy: false, // Vite uses inline scripts in dev
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: process.env.NODE_ENV === "production" ? ["'self'"] : ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://discord.com", "https://*.discord.com", "https://generativelanguage.googleapis.com"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
 }));
-app.use(cors());
+const allowedOrigin = process.env.ALLOWED_ORIGIN || process.env.APP_URL || "http://localhost:3000";
+app.use(cors({ origin: allowedOrigin, credentials: true }));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -267,6 +333,33 @@ process.on("unhandledRejection", (reason, promise) => {
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception thrown:", err);
 });
+
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal: string) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+  
+  try {
+    saveAdminSessions();
+    console.log("Admin sessions saved.");
+  } catch (e) {
+    console.error("Error saving sessions during shutdown:", e);
+  }
+  
+  try {
+    await stopDiscordBot();
+    console.log("Discord bot stopped.");
+  } catch (e) {
+    console.error("Error stopping Discord bot during shutdown:", e);
+  }
+  
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Enable JSON & Cookie parsing
 
@@ -469,8 +562,11 @@ app.get("/api/download/source", (req, res) => {
     if (cleanAuth) {
        if (cleanAuth.length === adminSecret.length && crypto.timingSafeEqual(Buffer.from(cleanAuth), Buffer.from(adminSecret))) {
           isAuthorized = true;
-       } else if (activeAdminSessions.has(cleanAuth)) {
-          isAuthorized = true;
+       } else {
+         const tokenHash = hashToken(cleanAuth);
+         if (activeAdminSessions.has(tokenHash)) {
+           isAuthorized = true;
+         }
        }
     }
     
@@ -530,10 +626,7 @@ app.post("/api/auth/discord/login", RateLimiterMiddleware.limit(60000, 10, "logi
       return res.status(403).json({ success: false, error: "Unauthorized Discord Account. You are not a server owner." });
     }
 
-    const sessionToken = "session_" + crypto.randomBytes(32).toString("hex");
-    const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    activeAdminSessions.set(sessionToken, { username: userData.username, createdAt: Date.now(), expiresAt });
-    saveAdminSessions();
+    const { token: sessionToken, expiresAt } = createAdminSession(userData.username);
 
     res.cookie("admin_session_token", sessionToken, {
       httpOnly: true,
@@ -553,6 +646,11 @@ app.post("/api/auth/discord/login", RateLimiterMiddleware.limit(60000, 10, "logi
 
 app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), (req, res) => {
   try {
+    const validation = validateInput({ adminKey: { required: true, type: "string", minLength: 1, maxLength: 200 } }, req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, error: validation.errors.join(", ") });
+    }
+
     const clientIp = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
     const isWhitelisted = AdminWhitelistSystem.isIpWhitelisted(clientIp);
 
@@ -563,10 +661,7 @@ app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), (re
     const secretMatches = inputKey && validSecret && inputKey.length === validSecret.length && crypto.timingSafeEqual(Buffer.from(inputKey), Buffer.from(validSecret));
 
     if (secretMatches) {
-      const sessionToken = "session_" + crypto.randomBytes(32).toString("hex");
-      const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-      activeAdminSessions.set(sessionToken, { username: "Admin", createdAt: Date.now(), expiresAt });
-      saveAdminSessions();
+      const { token: sessionToken, expiresAt } = createAdminSession("Admin");
 
       res.cookie("admin_session_token", sessionToken, {
         httpOnly: true,
@@ -608,7 +703,8 @@ app.get("/api/auth/session", (req, res) => {
       return res.json({ authenticated: true, username: "Admin", mode: "direct-secret", clientIp });
     }
 
-    const session = activeAdminSessions.get(tokenStr);
+    const tokenHash = hashToken(tokenStr);
+    const session = activeAdminSessions.get(tokenHash);
     if (session && Date.now() <= session.expiresAt) {
       return res.json({ authenticated: true, username: session.username, mode: "session-token", clientIp, expiresAt: session.expiresAt });
     }
@@ -665,7 +761,7 @@ app.post("/api/auth/logout", (req, res) => {
     const cookieToken = req.cookies?.admin_session_token || "";
     const tokenStr = authHeader.replace(/^Bearer\s+/i, "").trim() || cookieToken;
     if (tokenStr) {
-      activeAdminSessions.delete(tokenStr);
+      revokeAdminSessionByToken(tokenStr);
     }
     res.clearCookie("admin_session_token", { path: "/" });
     logAdminAuditAction("ADMIN_LOGOUT", req);
@@ -673,6 +769,43 @@ app.post("/api/auth/logout", (req, res) => {
   } catch (err) {
     res.clearCookie("admin_session_token", { path: "/" });
     return res.json({ success: true });
+  }
+});
+
+app.post("/api/auth/revoke-all", requireAdminAuth, (req, res) => {
+  try {
+    revokeAllAdminSessions();
+    logAdminAuditAction("REVOKE_ALL_SESSIONS", req);
+    return res.json({ success: true, message: "All admin sessions have been revoked." });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: "Failed to revoke sessions." });
+  }
+});
+
+app.post("/api/admin/backup-integrity-test", requireAdminAuth, async (req, res) => {
+  try {
+    const result = await runBackupIntegrityTest();
+    logAdminAuditAction("BACKUP_INTEGRITY_TEST", req, { passed: result.passed });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: "Backup integrity test failed." });
+  }
+});
+
+app.post("/api/admin/secrets-scan", requireAdminAuth, async (req, res) => {
+  try {
+    const { targetPath = process.cwd() } = req.body || {};
+    let scannedContent = "";
+    try {
+      scannedContent = fs.readFileSync(targetPath, "utf8");
+    } catch {
+      return res.status(400).json({ success: false, error: "Unable to read target path." });
+    }
+    const findings = scanForSecrets(scannedContent);
+    logAdminAuditAction("SECRETS_SCAN", req, { findingsCount: findings.length });
+    return res.json({ success: true, findingsCount: findings.length, findings: findings.map(f => f.slice(0, 8) + "***") });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: "Secrets scan failed." });
   }
 });
 
@@ -2266,10 +2399,17 @@ app.all("/api/*", (req, res) => {
 
 // Global Express API Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (req.path && req.path.startsWith("/api")) {
-    console.error("API Router Error:", err);
-    return res.status(500).json({ error: "Internal Server Error" });
+  const isApi = req.path && req.path.startsWith("/api");
+  console.error(isApi ? "API Router Error:" : "Server Error:", err);
+  
+  if (isApi) {
+    const status = typeof err?.status === "number" && err.status >= 400 && err.status < 600 ? err.status : 500;
+    return res.status(status).json({ 
+      error: status === 500 ? "Internal Server Error" : (err?.message || "Request failed"),
+      timestamp: new Date().toISOString()
+    });
   }
+  
   next(err);
 });
 
