@@ -3008,16 +3008,25 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
 
       const content = message.content;
       
-      const isLink = linkRegex.test(content);
-      let isMalicious = false;
-      if (isLink) {
-         // Smart Scam Scanner (VirusTotal Mock)
-         const maliciousDomains = ["grabify", "free-nitro", "steam-gift", "token-grab", "ip-logger", "discord-nitro.com"];
-         isMalicious = maliciousDomains.some(d => content.toLowerCase().includes(d));
-         if (isMalicious) {
-             addBotLog("🦠 SMART SCAM SCANNER: Blocked malicious link from " + member.user.tag, "error");
-         }
-      }
+       const isLink = linkRegex.test(content);
+       let isMalicious = false;
+       if (isLink) {
+          // Heuristic Scam Scanner (local blocklist; no external API call)
+          // To enable real VirusTotal scanning, set VIRUSTOTAL_API_KEY and uncomment the block below.
+          // if (process.env.VIRUSTOTAL_API_KEY) {
+          //   const vtRes = await fetch(`https://www.virustotal.com/api/v3/urls/${Buffer.from(content).toString('base64url')}`, {
+          //     headers: { 'x-apikey': process.env.VIRUSTOTAL_API_KEY }
+          //   });
+          //   const vtData = await vtRes.json();
+          //   isMalicious = vtData?.data?.attributes?.last_analysis_stats?.malicious > 0;
+          // } else {
+            const maliciousDomains = ["grabify", "free-nitro", "steam-gift", "token-grab", "ip-logger", "discord-nitro.com"];
+            isMalicious = maliciousDomains.some(d => content.toLowerCase().includes(d));
+          // }
+          if (isMalicious) {
+              addBotLog("🦠 SMART SCAM SCANNER: Blocked malicious link from " + member.user.tag, "error");
+          }
+       }
 
       const isNSFW = nsfwScamRegex.test(content);
 
@@ -5943,32 +5952,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
   }
 }
 
-// Function to simulate 100 Nukers Simultaneous Attack for Live Dashboard Testing
-// --- GLOBAL ERROR HANDLING & GRACEFUL SHUTDOWN (PREVENT CRASHES & CORRUPTION) ---
-let isShuttingDown = false;
-async function handleGracefulShutdown(signal: string) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-  console.log(`\n🛑 [GRACEFUL SHUTDOWN] Received ${signal}. Cleaning up connections & state...`);
-  addBotLog(`🛑 [SHUTDOWN] Bot received ${signal}. Executing graceful termination...`, "warning");
-  botStatus = "offline";
-
-  if (presenceRotatorInterval) clearInterval(presenceRotatorInterval);
-
-  if (clientInstance) {
-    try {
-      await clientInstance.destroy();
-      console.log("✅ Discord client connection destroyed safely.");
-    } catch (err: any) {
-      console.error("Error destroying Discord client during shutdown:", err.message);
-    }
-    clientInstance = null;
-  }
-  process.exit(0);
-}
-
-process.on("SIGTERM", () => handleGracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => handleGracefulShutdown("SIGINT"));
+// --- GLOBAL ERROR HANDLING (PREVENT CRASHES & CORRUPTION) ---
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("🚨 [UNHANDLED REJECTION]:", reason);

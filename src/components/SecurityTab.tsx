@@ -289,19 +289,31 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
     setZeroTrustModules(prev => prev.map(m => {
       if (m.id === id) {
         const next = !m.enabled;
-        onSimulateRaid(`Security policy '${m.name}' set to ${next ? 'ENABLED' : 'DISABLED'}`);
+        onSimulateRaid(`Security policy '${m.name}' set to ${next ? 'ENABLED' : 'DISABLED'} (dashboard state)`);
         return { ...m, enabled: next };
       }
       return m;
     }));
   };
 
-  const handleOneClickRestore = (componentName: string) => {
+  const handleOneClickRestore = async (componentName: string) => {
     setRecoveryStatus(`Restoring ${componentName} from last encrypted snapshot...`);
-    setTimeout(() => {
-      setRecoveryStatus(`✅ Instant ${componentName} Restore completed! 100% permissions restored.`);
-      onSimulateRaid(`Executed One-Click Instant ${componentName} Restore.`);
-    }, 1200);
+    try {
+      const res = await apiFetch("/api/snapshots/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshotId: "latest" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRecoveryStatus(`✅ Instant ${componentName} Restore completed! 100% permissions restored.`);
+        onSimulateRaid(`Executed One-Click Instant ${componentName} Restore.`);
+      } else {
+        setRecoveryStatus(`❌ Restore failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (e: any) {
+      setRecoveryStatus(`❌ Restore failed: ${e?.message || "Network error"}`);
+    }
   };
 
   const filteredModules = zeroTrustModules.filter(m => {
@@ -456,7 +468,19 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
                       </div>
                       <p className="text-[11px] text-zinc-500 leading-snug">{item.desc}</p>
                       <button
-                        onClick={() => onSimulateRaid(`Verified & Audited ${layerObj.title} feature: '${item.name}'`)}
+                        onClick={async () => {
+                          try {
+                            const res = await apiFetch("/api/bot/verify-audit", { method: "POST" });
+                            const data = await res.json();
+                            if (data.success) {
+                              onSimulateRaid(`Verified & Audited ${layerObj.title} feature: '${item.name}' — audit executed.`);
+                            } else {
+                              onSimulateRaid(`Audit failed for '${item.name}': ${data.error || "unknown"}`);
+                            }
+                          } catch (e: any) {
+                            onSimulateRaid(`Audit error for '${item.name}': ${e?.message || "network"}`);
+                          }
+                        }}
                         className="w-full mt-1 py-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50/80 hover:bg-indigo-100 rounded-md transition-colors text-center cursor-pointer"
                       >
                         ⚡ Test & Audit Rule
@@ -650,7 +674,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
             <button
               onClick={() => {
                 setEmergencyState(prev => ({ ...prev, readOnlyMode: !prev.readOnlyMode }));
-                onSimulateRaid(emergencyState.readOnlyMode ? 'Read Only Mode Deactivated.' : 'Emergency Read Only Mode Enabled.');
+                onSimulateRaid(emergencyState.readOnlyMode ? 'Read Only Mode Deactivated.' : 'Emergency Read Only Mode Enabled (dashboard state).');
               }}
               className={`p-5 rounded-2xl border text-left transition-all ${
                 emergencyState.readOnlyMode 
@@ -660,7 +684,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
             >
               <h4 className="text-sm font-black uppercase">🔒 Emergency Read-Only Mode</h4>
               <p className={`text-xs mt-1 ${emergencyState.readOnlyMode ? 'text-amber-100' : 'text-zinc-500'}`}>
-                {emergencyState.readOnlyMode ? 'READ-ONLY MODE ACTIVE' : 'Disable messages while preserving voice channels'}
+                {emergencyState.readOnlyMode ? 'READ-ONLY MODE ACTIVE (dashboard state)' : 'Dashboard-level read-only toggle (UI state only)'}
               </p>
             </button>
           </div>

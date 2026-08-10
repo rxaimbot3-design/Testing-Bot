@@ -82,7 +82,7 @@ export default function TicketTab({ tickets: initialTickets, onAddLog }: TicketT
     const userMsg = chatInput.trim();
     setChatInput('');
 
-    // Simulate agent response
+    // Simulate agent response (demo only — no backend agent connected)
     setTimeout(() => {
       setTranscript(prev => [...prev, `[Bot Assistant] Thank you for your inquiry. A staff agent has been alerted and will review: "${userMsg}"`]);
     }, 1000);

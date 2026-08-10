@@ -276,9 +276,9 @@ export default function GitHubTab() {
       });
       const data = await res.json();
       if (data.success) {
-        setSimSuccess(`Successfully sent '${event}' alert to Discord Bot! Check live console or Discord.`);
+        setSimSuccess(`Simulated '${event}' webhook alert dispatched to Discord Bot (synthetic event).`);
       } else {
-        setSimSuccess(`Alert dispatched, but Discord Bot connection is currently offline. (Please start Discord Bot first)`);
+        setSimSuccess(`Simulated alert dispatched, but Discord Bot connection is currently offline. (Please start Discord Bot first)`);
       }
     } catch (err: any) {
       console.error("Failed to simulate GitHub webhook:", err);
