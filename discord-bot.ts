@@ -2843,8 +2843,10 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             const errStr = String(geminiErr?.message || geminiErr).toLowerCase();
             if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
               reply = "Quota limit reached for AI generation, but all ASHTRON security shields remain 100% active!";
+            } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
+              reply = "AI service is temporarily unavailable. Please try again later.";
             } else {
-              reply = `AI Error: ${geminiErr?.message || geminiErr}`;
+              reply = "AI generation failed. Please try again later.";
             }
           }
           await message.reply(`🤖 **ASHTRON AI:**\n${reply.slice(0, 1900)}`).catch(() => {});
@@ -4532,8 +4534,10 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
             const errStr = String(geminiErr?.message || geminiErr).toLowerCase();
             if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
               reply = `Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust 100/100 Anti-Nuke shield fully active ase! 👍`;
+            } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
+              reply = `AI service temporary unavailable. Try again later.`;
             } else {
-              reply = `AI Error: ${geminiErr?.message || geminiErr}`;
+              reply = `AI generation failed. Please try again later.`;
             }
           }
 
@@ -4543,8 +4547,10 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
           const errStr = String(aiErr?.message || aiErr).toLowerCase();
           if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
             await interaction.editReply(`Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust 100/100 Anti-Nuke shield fully active ase! 👍`);
+          } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
+            await interaction.editReply(`AI service temporary unavailable. Try again later.`);
           } else {
-            await interaction.editReply(`❌ AI generation error: ${aiErr?.message || aiErr}`);
+            await interaction.editReply(`❌ AI generation error. Please try again later.`);
           }
         }
         return;
