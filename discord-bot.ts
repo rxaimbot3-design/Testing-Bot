@@ -2368,6 +2368,52 @@ client.on("ready", async () => {
             description: "🎵 View details of currently playing track"
           },
           {
+            name: "play",
+            description: "🎵 Play a song in voice channel",
+            options: [
+              {
+                name: "query",
+                type: 3, // STRING
+                description: "Song name or URL to play",
+                required: true
+              }
+            ]
+          },
+          {
+            name: "stop",
+            description: "⏹️ Stop playback and clear queue"
+          },
+          {
+            name: "skip",
+            description: "⏭️ Skip current track"
+          },
+          {
+            name: "pause",
+            description: "⏸️ Pause playback"
+          },
+          {
+            name: "resume",
+            description: "▶️ Resume playback"
+          },
+          {
+            name: "volume",
+            description: "🔊 Set playback volume (0-100)",
+            options: [
+              {
+                name: "level",
+                type: 4, // INTEGER
+                description: "Volume level (0-100)",
+                required: true,
+                min_value: 0,
+                max_value: 100
+              }
+            ]
+          },
+          {
+            name: "queue",
+            description: "📋 View current music queue"
+          },
+          {
             name: "invites",
             description: "✉️ Check member total invites & tracker stats",
             options: [
@@ -3327,26 +3373,32 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
       }
 
       try {
-        if (commandName === "nowplaying") {
-          const musicState = getOrCreateGuildMusicState(guild.id);
+         if (commandName === "nowplaying") {
+           const musicState = getOrCreateGuildMusicState(guild.id);
 
-          if (musicState && musicState.currentTrack) {
-            const track = musicState.currentTrack;
-            const isPlayingStr = musicState.isPaused ? "Paused ⏸️" : "Playing 🎵";
-            await interaction.reply({
-              embeds: [createSafeEmbed({
-                title: `🎵 Currently Playing: ${track.title}`,
-                description: `• **Artist:** ${track.artist || "AI Music Engine"}\n` +
-                             `• **Status:** ${isPlayingStr}\n` +
-                             `• **Volume:** ${musicState.volume}%\n` +
-                             `• **Queue Length:** ${musicState.queue.length} upcoming tracks\n` +
-                             `• **Requested By:** ${track.requestedBy || "User"}\n` +
-                             `• **Duration:** ${track.durationSeconds || 210} seconds`,
-                color: 0x3B82F6,
-                thumbnail: track.thumbnail || null
-              })],
-              ephemeral: false
-            }).catch(() => {});
+           if (musicState && musicState.currentTrack) {
+             const track = musicState.currentTrack;
+             const isPlayingStr = musicState.isPaused ? "Paused ⏸️" : "Playing 🎵";
+             const duration = track.durationSeconds || 210;
+             const position = Math.min(musicState.positionSeconds || 0, duration);
+             const progressBar = "█".repeat(Math.floor((position / duration) * 20)) + "░".repeat(20 - Math.floor((position / duration) * 20));
+             const progressText = `${Math.floor(position / 60)}:${String(position % 60).padStart(2, '0')} / ${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')}`;
+             
+             await interaction.reply({
+               embeds: [createSafeEmbed({
+                 title: `🎵 Currently Playing: ${track.title}`,
+                 description: `• **Artist:** ${track.artist || "AI Music Engine"}\n` +
+                              `• **Status:** ${isPlayingStr}\n` +
+                              `• **Volume:** ${musicState.volume}%\n` +
+                              `• **Queue Length:** ${musicState.queue.length} upcoming tracks\n` +
+                              `• **Requested By:** ${track.requestedBy || "User"}\n` +
+                              `• **Duration:** ${progressText}\n` +
+                              `\`${progressBar}\``,
+                 color: 0x3B82F6,
+                 thumbnail: track.thumbnail || null
+               })],
+               ephemeral: false
+             }).catch(() => {});
           } else {
             await interaction.reply({
               embeds: [createSafeEmbed({
@@ -3444,13 +3496,37 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
              }
           } else if (commandName === "pause") {
              musicState.isPaused = true;
-             await interaction.reply(`⏸️ **Paused!**`);
-          } else if (commandName === "resume") {
-             musicState.isPaused = false;
-             await interaction.reply(`▶️ **Resumed!**`);
-          }
-          return;
-        }
+              await interaction.reply(`⏸️ **Paused!**`);
+           } else if (commandName === "resume") {
+              musicState.isPaused = false;
+              await interaction.reply(`▶️ **Resumed!**`);
+           } else if (commandName === "volume") {
+              const level = interaction.options.getInteger("level");
+              if (level === null || level < 0 || level > 100) {
+                await interaction.reply({ content: "❌ Please provide a valid volume level (0-100).", ephemeral: true });
+                return;
+              }
+              musicState.volume = level;
+              await interaction.reply(`🔊 **Volume set to:** \`${level}%\``);
+           } else if (commandName === "queue") {
+              if (musicState.queue.length === 0) {
+                await interaction.reply({ content: "📭 **Queue is empty.**", ephemeral: true });
+                return;
+              }
+              const queueList = musicState.queue.slice(0, 10).map((track, i) => 
+                `\`${i + 1}.\` **${track.title}** by ${track.artist} (${Math.floor(track.durationSeconds / 60)}:${String(track.durationSeconds % 60).padStart(2, '0')})`
+              ).join("\n");
+              await interaction.reply({
+                embeds: [{
+                  title: "📋 Music Queue",
+                  description: queueList + (musicState.queue.length > 10 ? `\n...and ${musicState.queue.length - 10} more` : ""),
+                  color: 0x3B82F6,
+                  footer: { text: `Total: ${musicState.queue.length} tracks | Volume: ${musicState.volume}%` }
+                }]
+              });
+           }
+           return;
+         }
 
         if (commandName === "help") {
           await interaction.reply({
@@ -4385,15 +4461,6 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
         await (targetChannel as GuildChannel).permissionOverwrites.edit(vRole, { ViewChannel: false }).catch(() => {});
         await (targetChannel as GuildChannel).permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
         await interaction.editReply(`🙈 Channel **${targetChannel.name}** is now strictly **HIDDEN** from regular members!`);
-        return;
-      }
-
-      // Legacy Layer Commands redirecting to Unified Zero Trust Shield
-      if (commandName === "layer1" || commandName === "layer2" || commandName === "layer3" || commandName === "layer4" || commandName === "layer5" || commandName === "layer6") {
-        await interaction.reply({
-          content: `🛡️ **ASHTRON ZERO TRUST ENGINE:** All 6 defense layers (Prevention, Detection, Containment, Recovery, Monitoring, Reliability) are unified under **\` /deploy-defense \`** or **\` /zerotrust \`**.\n\nUse **\`/deploy-defense\`** to enforce and view status for all 6 layers simultaneously!`,
-          ephemeral: true
-        }).catch(() => {});
         return;
       }
 
