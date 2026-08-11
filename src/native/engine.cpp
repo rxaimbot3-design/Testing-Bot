@@ -39,7 +39,8 @@ Napi::Object SecurityEngine::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-SecurityEngine::SecurityEngine(const Napi::CallbackInfo& info) : env(info.Env()) {
+SecurityEngine::SecurityEngine(const Napi::CallbackInfo& info) 
+  : Napi::ObjectWrap<SecurityEngine>(info) {
   memoryArena.resize(4096, 0);
   startTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(
     std::chrono::system_clock::now().time_since_epoch()
@@ -142,7 +143,7 @@ Napi::Value SecurityEngine::ComputeHash(const Napi::CallbackInfo& info) {
       h = (h * 31) ^ static_cast<uint64_t>(data[i]);
     }
     char buf[17];
-    snprintf(buf, sizeof(buf), "%016llx", h);
+    snprintf(buf, sizeof(buf), "%016lx", h);
     hash = buf;
   } else if (algorithm == "sha512") {
     uint64_t h1 = 0xFFFFFFFFFFFFFFFFULL;
@@ -152,7 +153,7 @@ Napi::Value SecurityEngine::ComputeHash(const Napi::CallbackInfo& info) {
       h2 = (h2 * 41) ^ static_cast<uint64_t>(data[i]);
     }
     char buf[33];
-    snprintf(buf, sizeof(buf), "%016llx%016llx", h1, h2);
+    snprintf(buf, sizeof(buf), "%016lx%016lx", h1, h2);
     hash = buf;
   } else {
     uint32_t crc = 0xFFFFFFFF;
