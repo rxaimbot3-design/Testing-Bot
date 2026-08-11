@@ -39,7 +39,7 @@ import {
    AuditLogMonitor, DailyBackup, AnomalyAI, CanaryToken, NukeDefense, GlobalIntelligence, 
    WebhookGuard, AutoHeal, AIDeepScan, Quarantine, TemporalRaidLock, SentimentTracker, 
    BehaviorScoring, HoneypotAdminRole, SessionHijackDetector, OAuthMaliciousAppDetector, 
-   BotTokenRotationSystem, AutoPermissionRollback, ServerSnapshotRestore, AntiVanityHijack, 
+    BotTokenRotationSystem, AutoPermissionRollback, ServerSnapshotRestore, AutoBackupEngine, AntiVanityHijack, 
    EmojiStickerProtection, ForumChannelProtection, AIRaidPrediction, AISecurityReport, 
    AICommandAssistant, MongoRedisEngine, PremiumLicenseSystem, IPBanSystem, 
    JoinLimitShield, AntiInviteShield, InviteTrackerEngine, ZeroTrustSecurityEngine, AiRaidPredictionEngine, atomicWriteJsonSync 
