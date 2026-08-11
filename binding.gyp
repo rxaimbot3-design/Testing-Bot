@@ -4,8 +4,11 @@
       "target_name": "security_engine",
       "sources": [ "src/native/engine.cpp" ],
       "include_dirs": [
-        "<!(node -p \"require('node-addon-api').include_dir\")"
+        "<!(node -p \"require('node-addon-api').include_dir\")",
+        "/usr/include",
+        "/usr/include/openssl"
       ],
+      "libraries": [ "-lssl", "-lcrypto" ],
       "dependencies": [
         "<!(node -p \"require('node-addon-api').gyp\")"
       ],
