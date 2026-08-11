@@ -1,5 +1,32 @@
 [
   {
+    "timestamp": "2026-08-11T12:14:22.445Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    }
+  },
+  {
+    "timestamp": "2026-08-11T12:14:09.942Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    }
+  },
+  {
+    "timestamp": "2026-08-11T12:13:54.553Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    }
+  },
+  {
     "timestamp": "2026-08-11T11:58:52.941Z",
     "action": "ADMIN_LOGIN",
     "actorIp": "127.0.0.1",
