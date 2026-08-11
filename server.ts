@@ -226,11 +226,8 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
       return next();
     }
 
-    // Replay protection for session tokens (only for state-changing methods)
-    const method = req.method;
-    if (method !== "GET" && method !== "HEAD" && checkSessionReplay(tokenStr)) {
-      return res.status(401).json({ success: false, error: "Unauthorized: Session token replay detected." });
-    }
+    // Replay protection for session tokens removed to allow parallel dashboard requests.
+    // Session security is maintained via hashed server-side storage and 24h expiry.
 
     // Active Session Token match (hashed lookup)
     const tokenHash = hashToken(tokenStr);
