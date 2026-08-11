@@ -17,6 +17,8 @@ export interface GuildMusicState {
   queue: MusicTrack[];
   voiceChannelId: string | null;
   voiceChannelName: string | null;
+  equalizer: string;
+  loopMode: 'off' | 'track' | 'queue';
 }
 
 const guildMusicStates = new Map<string, GuildMusicState>();
@@ -32,7 +34,9 @@ export function getOrCreateGuildMusicState(guildId: string): GuildMusicState {
       positionSeconds: 0,
       queue: [],
       voiceChannelId: null,
-      voiceChannelName: null
+      voiceChannelName: null,
+      equalizer: 'flat',
+      loopMode: 'off'
     });
   }
   return guildMusicStates.get(id)!;
