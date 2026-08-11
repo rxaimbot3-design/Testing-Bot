@@ -35,14 +35,14 @@ import {
   Message
 } from "discord.js";
 import { 
-  TokenVault, OwnerLock, EnvScanner, DMFirewall, SlashOnly, AntiPhishing, RateLimiter, 
-  AuditLogMonitor, DailyBackup, AnomalyAI, CanaryToken, NukeDefense, GlobalIntelligence, 
-  WebhookGuard, AutoHeal, AIDeepScan, Quarantine, TemporalRaidLock, SentimentTracker, 
-  BehaviorScoring, HoneypotAdminRole, SessionHijackDetector, OAuthMaliciousAppDetector, 
-  BotTokenRotationSystem, AutoPermissionRollback, ServerSnapshotRestore, AntiVanityHijack, 
-  EmojiStickerProtection, ForumChannelProtection, AIRaidPrediction, AISecurityReport, 
-  AICommandAssistant, MongoRedisEngine, PremiumLicenseSystem, IPBanSystem, AutoBackupEngine, 
-  JoinLimitShield, AntiInviteShield, InviteTrackerEngine, ZeroTrustSecurityEngine, AiRaidPredictionEngine, atomicWriteJsonSync 
+   TokenVault, OwnerLock, EnvScanner, DMFirewall, SlashOnly, AntiPhishing, RateLimiter, 
+   CanaryToken, NukeDefense, GlobalIntelligence, 
+   WebhookGuard, AIDeepScan, Quarantine, SentimentTracker, 
+   BehaviorScoring, OAuthMaliciousAppDetector, 
+   ServerSnapshotRestore, 
+   AIRaidPrediction, AISecurityReport, 
+   AICommandAssistant, IPBanSystem, 
+   JoinLimitShield, AntiInviteShield, InviteTrackerEngine, atomicWriteJsonSync 
 } from "./src/SecurityFeatures.js";
 import { validateEnvironmentVariables } from "./src/EnvValidator.js";
 import { CppNativeEngine } from "./src/CppEngine.js";
@@ -1926,9 +1926,9 @@ client.on("ready", async () => {
     // 11. Daily Backup (Enterprise Configuration)
     safeSetInterval(() => {
         client.guilds.cache.forEach(guild => {
-             AutoBackupEngine.createBackup(guild).then(file => {
-               if (file) addBotLog(`📦 [AUTO-BACKUP] Scheduled daily backup created: ${file}`, "info");
-             }).catch(()=>console.log('backup failed'));
+             ServerSnapshotRestore.createSnapshot(guild).then(snap => {
+               if (snap) addBotLog(`📸 [SNAPSHOT] Scheduled daily snapshot created: ${snap.id}`, "info");
+             }).catch(()=>console.log('snapshot failed'));
         });
     }, 24 * 60 * 60 * 1000);
 
@@ -4033,18 +4033,18 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
         }
 
         await interaction.deferReply();
-        const filename = await AutoBackupEngine.createBackup(guild);
+        const snapshot = await ServerSnapshotRestore.createSnapshot(guild);
 
-        if (filename) {
-          addBotLog(`📦 [AUTO-BACKUP] Manual backup created: ${filename}`, "success");
+        if (snapshot) {
+          addBotLog(`📸 [SNAPSHOT] Manual server snapshot created: ${snapshot.id}`, "success");
           await safeReply(interaction, {
             embeds: [{
-              title: "📦 SERVER BACKUP SUCCESSFUL",
-              description: `✅ **Server configuration successfully backed up!**\n\n` +
-                           `• **Filename:** \`${filename}\`\n` +
+              title: "📸 SERVER SNAPSHOT SUCCESSFUL",
+              description: `✅ **Server configuration successfully snapshotted!**\n\n` +
+                           `• **Snapshot ID:** \`${snapshot.id}\`\n` +
                            `• **Content:** All roles, channels, and permissions.\n` +
-                           `• **Storage:** Saved in the local secure backup folder.\n\n` +
-                           `*In the future, in case of a raid or accidental deletion, everything can be restored using this file.*`,
+                           `• **Storage:** Saved in the local secure snapshots folder.\n\n` +
+                           `*In the future, in case of a raid or accidental deletion, everything can be restored using this snapshot.*`,
               color: 0x10B981
             }]
           });
