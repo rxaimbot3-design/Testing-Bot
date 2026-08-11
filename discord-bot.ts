@@ -1484,14 +1484,14 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
           cName.includes("jail") || cName.includes("sensi") || cName.includes("khopche") || 
           cName.includes("🔒") || cName.includes("🔐") || cName.includes("⛔") || cName.includes("🚫");
 
-        if (isLockedVC) {
-          lockedVCs++;
-          await channel.permissionOverwrites.edit(guild.roles.everyone, {
-            ViewChannel: true,
-            Connect: false,
-            Speak: false
-          }).catch(() => {});
+        // Detect manual/admin locks from existing @everyone permission overwrites
+        const everyoneOverwrite = channel.permissionOverwrites.cache.get(guild.roles.everyone.id);
+        const everyoneConnectDenied = everyoneOverwrite?.deny.has(PermissionFlagsBits.Connect) || everyoneOverwrite?.deny.has(PermissionFlagsBits.ViewChannel);
+        const isManuallyLocked = isLockedVC || everyoneConnectDenied;
 
+        if (isManuallyLocked) {
+          lockedVCs++;
+          // DO NOT touch @everyone permissions - preserve admin locks
           await channel.permissionOverwrites.edit(unverifiedRole, {
             ViewChannel: true,
             Connect: false,
@@ -1505,12 +1505,7 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
           }).catch(() => {});
         } else {
           unlockedChannels++;
-          await channel.permissionOverwrites.edit(guild.roles.everyone, {
-            ViewChannel: true,
-            Connect: true,
-            Speak: false
-          }).catch(() => {});
-
+          // DO NOT touch @everyone permissions - respect admin settings
           await channel.permissionOverwrites.edit(unverifiedRole, {
             ViewChannel: true,
             Connect: true,
