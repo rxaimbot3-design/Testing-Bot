@@ -1,8 +1,12 @@
 import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import { Worker } from "worker_threads";
 import { createRequire } from "module";
 import { createHash } from "crypto";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const requireNative = (() => {
   try {
@@ -492,11 +496,9 @@ export class CppNativeEngine {
   static async batchComputeHashes(requests: HashRequest[]): Promise<Array<{ hash: string; latencyMicros: number }>> {
     if (this.engineMode === "native" && nativeInstance) {
       try {
-        const jsArray = requests.map(r => ({ data: r.data, algorithm: r.algorithm }));
-        const result = nativeInstance.computeHash(jsArray);
         const arr: Array<{ hash: string; latencyMicros: number }> = [];
-        for (let i = 0; i < result.length; i++) {
-          const item = result[i];
+        for (const r of requests) {
+          const item = nativeInstance.computeHash(r.data, r.algorithm);
           arr.push({
             hash: String(item.hash),
             latencyMicros: typeof item.latencyMicros === 'number' ? item.latencyMicros : Number(item.latencyMicros)
@@ -523,14 +525,14 @@ export class CppNativeEngine {
       try {
         const m = nativeInstance.getMetrics();
         return {
-          engineName: String(m.engineName || m.get('engineName') || 'C++ Native Security Core'),
-          architecture: String(m.architecture || m.get('architecture') || 'Native'),
-          status: String(m.status || m.get('status') || 'ACTIVE_MICROSECOND') as any,
+          engineName: String(m.engineName || 'C++ Native Security Core'),
+          architecture: String(m.architecture || 'Native'),
+          status: String(m.status || 'ACTIVE_MICROSECOND') as any,
           memoryAllocatedBytes: typeof m.memoryAllocatedBytes === 'number' ? m.memoryAllocatedBytes : Number(m.memoryAllocatedBytes || 0),
           memoryUsedMB: typeof m.memoryUsedMB === 'number' ? m.memoryUsedMB : Number(m.memoryUsedMB || 0),
           averageLatencyMicroseconds: typeof m.averageLatencyMicroseconds === 'number' ? m.averageLatencyMicroseconds : Number(m.averageLatencyMicroseconds || 12),
           throughputPerSecond: typeof m.throughputPerSecond === 'number' ? m.throughputPerSecond : Number(m.throughputPerSecond || 0),
-          simdAcceleration: Boolean(m.simdAcceleration || m.get('simdAcceleration')),
+          simdAcceleration: Boolean(m.simdAcceleration),
           activeThreads: typeof m.activeThreads === 'number' ? m.activeThreads : Number(m.activeThreads || 1),
           totalAuditsProcessed: typeof m.totalAuditsProcessed === 'number' ? m.totalAuditsProcessed : Number(m.totalAuditsProcessed || 0)
         };
