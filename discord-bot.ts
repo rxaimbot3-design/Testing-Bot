@@ -1742,6 +1742,7 @@ export async function startDiscordBot() {
 
   EnvScanner.scan();
   CanaryToken.setup();
+  CppNativeEngine.initEngine().catch(() => {});
 
   if (!token || token.length < 50 || token.includes("placeholder") || token.includes("your_token") || token.includes("token_here")) {
     addBotLog("DISCORD_BOT_TOKEN is not configured or invalid. Bot is offline.", "warning");
@@ -5961,17 +5962,22 @@ process.on("uncaughtException", (err) => {
 export async function runNukeDefenseDrill() {
   const startTime = Date.now();
   addBotLog(`⚡ [RUNNING 100-NUKER STRESS TEST DRILL] Executing real microsecond security packet scan on 100 simulated attack vector signatures...`, "warning");
-  
+
   let passedCount = 0;
   let totalMicros = 0;
 
-  // Execute 100 real security scans via C++ Native Engine
+  const requests: Array<{ packetId: number; riskWeight: number }> = [];
   for (let i = 1; i <= 100; i++) {
-    const risk = 5.0 + Math.random() * 5.0; // High risk 5-10
-    const scan = CppNativeEngine.scanSecurityPacket(1000 + i, risk);
+    const risk = 5.0 + Math.random() * 5.0;
+    requests.push({ packetId: 1000 + i, riskWeight: risk });
+  }
+
+  const scans = await CppNativeEngine.batchScanPackets(requests);
+  for (let i = 0; i < scans.length; i++) {
+    const scan = scans[i];
     if (scan.passed) passedCount++;
     totalMicros += scan.latencyMicros;
-    BehaviorScoring.recordViolation(`simulated_drill_attacker_${i % 10}`);
+    BehaviorScoring.recordViolation(`simulated_drill_attacker_${(i + 1) % 10}`);
   }
 
   const avgLatency = (totalMicros / 100).toFixed(2);

@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "cross-env NODE_ENV=development UV_THREADPOOL_SIZE=128 tsx server.ts",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=450 vite build && cross-env NODE_OPTIONS=--max-old-space-size=450 esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=server-build/server.cjs",
+    "build:worker": "npx esbuild src/EngineWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=server-build/EngineWorker.js",
+    "build": "npm run build:worker && cross-env NODE_OPTIONS=--max-old-space-size=450 npx vite build && cross-env NODE_OPTIONS=--max-old-space-size=450 npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=server-build/server.cjs",
     "start": "cross-env NODE_ENV=production node server-build/server.cjs",
     "clean": "rm -rf dist server-build server.js",
     "lint": "tsc --noEmit",
