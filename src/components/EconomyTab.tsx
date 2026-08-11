@@ -21,11 +21,33 @@ interface EconomyTabProps {
 
 export default function EconomyTab({ leaderboard, onAddLog }: EconomyTabProps) {
   const [users, setUsers] = useState<LeaderboardUser[]>(leaderboard);
+  const [loading, setLoading] = useState(true);
   const [myCoins, setMyCoins] = useState(450);
   const [bankBalance, setBankBalance] = useState(1200);
   const [dailyClaimed, setDailyClaimed] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchLeaderboard = async () => {
+      try {
+        const res = await apiFetch('/api/economy/leaderboard');
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && data.leaderboard) {
+            setUsers(data.leaderboard);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to fetch leaderboard:", e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    fetchLeaderboard();
+    return () => { mounted = false; };
+  }, []);
 
   // Shop Items
   const shopItems = [
@@ -210,9 +232,14 @@ export default function EconomyTab({ leaderboard, onAddLog }: EconomyTabProps) {
         </div>
 
         <div className="space-y-2">
-          {users
-            .sort((a, b) => b.xp - a.xp)
-            .map((user, idx) => (
+          {loading ? (
+            <div className="text-center py-8 text-xs text-zinc-400 font-bold">Loading leaderboard data...</div>
+          ) : users.length === 0 ? (
+            <div className="text-center py-8 text-xs text-zinc-500">No leaderboard data available yet.</div>
+          ) : (
+            users
+              .sort((a, b) => b.xp - a.xp)
+              .map((user, idx) => (
               <div 
                 key={idx} 
                 className={`flex items-center justify-between p-3 rounded-xl border ${

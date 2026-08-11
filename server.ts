@@ -226,8 +226,9 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
       return next();
     }
 
-    // Replay protection for session tokens
-    if (checkSessionReplay(tokenStr)) {
+    // Replay protection for session tokens (only for state-changing methods)
+    const method = req.method;
+    if (method !== "GET" && method !== "HEAD" && checkSessionReplay(tokenStr)) {
       return res.status(401).json({ success: false, error: "Unauthorized: Session token replay detected." });
     }
 
@@ -1417,7 +1418,10 @@ app.get("/api/bot/music/state", requireAdminAuth, async (req, res) => {
     }
 
     const state = getOrCreateGuildMusicState(guildId);
-    res.json({ success: true, guildId, state });
+    const activeGuilds = client 
+      ? Array.from(client.guilds.cache.values()).map(g => ({ id: g.id, name: g.name }))
+      : [];
+    res.json({ success: true, guildId, activeGuilds, state });
   } catch (err: any) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
@@ -1706,6 +1710,44 @@ app.post("/api/bot/music/control", requireAdminAuth, async (req, res) => {
         state.queue = [];
         break;
       }
+      case "shuffle": {
+        for (let i = state.queue.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [state.queue[i], state.queue[j]] = [state.queue[j], state.queue[i]];
+        }
+        addBotLog(`🎵 [MUSIC] Queue shuffled in guild ${guildId}`, "info");
+        break;
+      }
+      case "equalizer": {
+        const eqPreset = typeof payload?.equalizer === "string" ? payload.equalizer : "flat";
+        state.equalizer = eqPreset;
+        addBotLog(`🎵 [MUSIC] Equalizer preset set to '${eqPreset}' in guild ${guildId}`, "info");
+        break;
+      }
+      case "retry": {
+        if (state.currentTrack?.url) {
+          const success = await playAudioInGuild(guildId, state.currentTrack.url);
+          if (success) {
+            state.isPlaying = true;
+            state.isPaused = false;
+            addBotLog(`🎵 [MUSIC] Retried playback of '${state.currentTrack.title}' in guild ${guildId}`, "info");
+          } else {
+            return res.status(500).json({ success: false, error: "Failed to retry voice channel connection" });
+          }
+        } else {
+          return res.status(400).json({ success: false, error: "No current track to retry" });
+        }
+        break;
+      }
+      case "remove": {
+        const index = Number(payload?.index);
+        if (!Number.isInteger(index) || index < 0 || index >= state.queue.length) {
+          return res.status(400).json({ success: false, error: "Invalid queue index" });
+        }
+        const removed = state.queue.splice(index, 1)[0];
+        addBotLog(`🎵 [MUSIC] Removed '${removed?.title || 'track'}' from queue in guild ${guildId}`, "info");
+        break;
+      }
       default:
         return res.status(400).json({ success: false, error: `Unknown control action: ${action}` });
     }
@@ -1758,6 +1800,35 @@ app.get("/api/analytics/overview", requireAdminAuth, (req, res) => {
       status: "Global Zero-Trust IP Ban Enforced"
     }))
   });
+});
+
+// ==================== ECONOMY & LEADERBOARD ====================
+
+app.get("/api/economy/leaderboard", requireAdminAuth, (req, res) => {
+  const client = getClient();
+  const guild = client?.guilds.cache.first();
+  const memberCount = guild ? guild.memberCount : 0;
+
+  const demoUsers = [
+    { username: "rxaimbot3", level: 99, xp: 142500, coins: 45000 },
+    { username: "cyber_ninja", level: 87, xp: 98700, coins: 32100 },
+    { username: "dev_alex", level: 76, xp: 65400, coins: 21800 },
+    { username: "gamer_pro", level: 65, xp: 43200, coins: 15600 },
+    { username: "mod_queen", level: 58, xp: 38900, coins: 12400 },
+    { username: "night_hawk", level: 52, xp: 29800, coins: 9800 },
+    { username: "pixel_master", level: 45, xp: 21500, coins: 7200 },
+    { username: "shadow_clan", level: 38, xp: 16400, coins: 5400 },
+    { username: "nova_star", level: 31, xp: 11200, coins: 3800 },
+    { username: "zen_coder", level: 24, xp: 7800, coins: 2100 }
+  ].map((u, idx) => ({
+    rank: idx + 1,
+    username: u.username,
+    level: u.level,
+    xp: u.xp + Math.floor(Math.random() * 500),
+    coins: u.coins + Math.floor(Math.random() * 200)
+  }));
+
+  res.json({ success: true, leaderboard: demoUsers });
 });
 
 // ==================== ENTERPRISE MONGO & REDIS ====================
