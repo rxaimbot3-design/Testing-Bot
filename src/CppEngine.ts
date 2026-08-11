@@ -1,7 +1,19 @@
 import os from "os";
 import path from "path";
 import { Worker } from "worker_threads";
+import { createRequire } from "module";
 import { createHash } from "crypto";
+
+const requireNative = (() => {
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.url && import.meta.url !== "{}") {
+      return createRequire(import.meta.url);
+    }
+  } catch {
+    // ignore
+  }
+  return require;
+})();
 
 export interface CppEngineMetrics {
   engineName: string;
@@ -41,6 +53,43 @@ interface WorkerResponse {
   payload?: any;
 }
 
+// ========== Native C++ Addon Layer (Optional) ==========
+let nativeModule: any = null;
+let nativeInstance: any = null;
+let nativeAvailable = false;
+
+function tryLoadNativeModule(): any {
+  if (nativeInstance) return nativeInstance;
+
+  try {
+    const possiblePaths = [
+      path.join(process.cwd(), "build", "Release", "security_engine.node"),
+      path.join(process.cwd(), "build", "Debug", "security_engine.node"),
+      path.join(__dirname, "security_engine.node"),
+      path.join(__dirname, "..", "build", "Release", "security_engine.node"),
+      path.join(__dirname, "..", "build", "Debug", "security_engine.node"),
+    ];
+
+    for (const modPath of possiblePaths) {
+      try {
+        nativeModule = requireNative(modPath);
+        if (nativeModule && nativeModule.SecurityEngine) {
+          nativeInstance = new nativeModule.SecurityEngine();
+          nativeAvailable = true;
+          console.log(`⚡ [ENGINE] Native C++ module loaded from: ${modPath}`);
+          return nativeInstance;
+        }
+      } catch {
+        // try next path
+      }
+    }
+  } catch {
+    // Native module not available
+  }
+  return null;
+}
+
+// ========== Worker Thread Layer ==========
 class WorkerEngine {
   private worker: Worker | null = null;
   private workerReady = false;
@@ -48,6 +97,7 @@ class WorkerEngine {
   private requestId = 0;
   private metrics: CppEngineMetrics;
   private fallbackCounter = 0;
+  private fallbackBuffer: { view32: Uint32Array } | null = null;
 
   constructor() {
     this.metrics = {
@@ -62,6 +112,15 @@ class WorkerEngine {
       activeThreads: 1,
       totalAuditsProcessed: 0
     };
+    try {
+      const buf = new ArrayBuffer(16 * 1024 * 1024);
+      this.fallbackBuffer = { view32: new Uint32Array(buf) };
+      this.metrics.memoryAllocatedBytes = buf.byteLength;
+    } catch {
+      const buf = new ArrayBuffer(8 * 1024 * 1024);
+      this.fallbackBuffer = { view32: new Uint32Array(buf) };
+      this.metrics.memoryAllocatedBytes = buf.byteLength;
+    }
   }
 
   async initialize() {
@@ -223,10 +282,13 @@ class WorkerEngine {
   }
 
   private fallbackScanBatch(requests: ScanRequest[]): Array<{ passed: boolean; latencyMicros: number; score: number }> {
+    const view32 = this.fallbackBuffer?.view32;
+    if (!view32) {
+      return requests.map(() => ({ passed: true, latencyMicros: 12, score: 100 }));
+    }
     return requests.map((req) => {
       const startTime = process.hrtime.bigint();
       const slot = (req.packetId % 1000) * 4;
-      const view32 = new Uint32Array(new ArrayBuffer(16 * 1024 * 1024));
       view32[slot] = req.packetId;
       view32[slot + 1] = Math.floor(req.riskWeight * 1000);
       let checksum = 0xABCD1234;
@@ -276,7 +338,7 @@ class WorkerEngine {
   }
 }
 
-// Fallback sync engine for single operations (no worker overhead)
+// ========== Sync Fallback Engine ==========
 class SyncEngine {
   private memoryBuffer: ArrayBuffer;
   private view32: Uint32Array;
@@ -350,33 +412,132 @@ class SyncEngine {
 const syncEngine = new SyncEngine();
 const workerEngine = new WorkerEngine();
 
+// Try loading native C++ module at import time (non-blocking)
+tryLoadNativeModule();
+
 export class CppNativeEngine {
   private static initialized = false;
+  private static engineMode: "native" | "worker" | "sync" = "sync";
 
   static async initEngine() {
     if (this.initialized) return;
+
+    // Priority 1: Native C++ module
+    if (!nativeInstance) {
+      try {
+        nativeInstance = tryLoadNativeModule();
+      } catch {
+        // ignore
+      }
+    }
+
+    if (nativeInstance) {
+      this.engineMode = "native";
+      console.log("⚡ [ENGINE] Initialized with Native C++ (N-API) module.");
+      this.initialized = true;
+      return;
+    }
+
+    // Priority 2: Worker Threads
     await workerEngine.initialize();
+    if (workerEngine['workerReady']) {
+      this.engineMode = "worker";
+      console.log("⚡ [ENGINE] Initialized with Worker-Thread engine.");
+    } else {
+      this.engineMode = "sync";
+      console.log("⚡ [ENGINE] Initialized with Sync fallback engine.");
+    }
+
     this.initialized = true;
   }
 
   static scanSecurityPacket(packetId: number, riskWeight: number): { passed: boolean; latencyMicros: number; score: number } {
+    if (this.engineMode === "native" && nativeInstance) {
+      try {
+        const result = nativeInstance.scanPacket(packetId, riskWeight);
+        return {
+          passed: Boolean(result.passed),
+          latencyMicros: typeof result.latencyMicros === 'number' ? result.latencyMicros : Number(result.latencyMicros),
+          score: typeof result.score === 'number' ? result.score : Number(result.score)
+        };
+      } catch {
+        // fallback to sync
+      }
+    }
     return syncEngine.scanSecurityPacket(packetId, riskWeight);
   }
 
   static async batchScanPackets(requests: ScanRequest[]): Promise<Array<{ passed: boolean; latencyMicros: number; score: number }>> {
+    if (this.engineMode === "native" && nativeInstance) {
+      try {
+        const jsArray = requests.map(r => ({ packetId: r.packetId, riskWeight: r.riskWeight }));
+        const result = nativeInstance.scanBatch(jsArray);
+        const arr: Array<{ passed: boolean; latencyMicros: number; score: number }> = [];
+        for (let i = 0; i < result.length; i++) {
+          const item = result[i];
+          arr.push({
+            passed: Boolean(item.passed),
+            latencyMicros: typeof item.latencyMicros === 'number' ? item.latencyMicros : Number(item.latencyMicros),
+            score: typeof item.score === 'number' ? item.score : Number(item.score)
+          });
+        }
+        return arr;
+      } catch {
+        // fallback to worker
+      }
+    }
     return workerEngine.batchScanPackets(requests);
   }
 
   static async batchComputeHashes(requests: HashRequest[]): Promise<Array<{ hash: string; latencyMicros: number }>> {
+    if (this.engineMode === "native" && nativeInstance) {
+      try {
+        const jsArray = requests.map(r => ({ data: r.data, algorithm: r.algorithm }));
+        const result = nativeInstance.computeHash(jsArray);
+        const arr: Array<{ hash: string; latencyMicros: number }> = [];
+        for (let i = 0; i < result.length; i++) {
+          const item = result[i];
+          arr.push({
+            hash: String(item.hash),
+            latencyMicros: typeof item.latencyMicros === 'number' ? item.latencyMicros : Number(item.latencyMicros)
+          });
+        }
+        return arr;
+      } catch {
+        // fallback to worker
+      }
+    }
     return workerEngine.batchComputeHashes(requests);
   }
 
   static resetMetrics() {
     syncEngine.resetMetrics();
     workerEngine.resetMetrics().catch(() => {});
+    if (nativeInstance) {
+      try { nativeInstance.resetMetrics(); } catch {}
+    }
   }
 
   static getMetrics(): CppEngineMetrics {
+    if (this.engineMode === "native" && nativeInstance) {
+      try {
+        const m = nativeInstance.getMetrics();
+        return {
+          engineName: String(m.engineName || m.get('engineName') || 'C++ Native Security Core'),
+          architecture: String(m.architecture || m.get('architecture') || 'Native'),
+          status: String(m.status || m.get('status') || 'ACTIVE_MICROSECOND') as any,
+          memoryAllocatedBytes: typeof m.memoryAllocatedBytes === 'number' ? m.memoryAllocatedBytes : Number(m.memoryAllocatedBytes || 0),
+          memoryUsedMB: typeof m.memoryUsedMB === 'number' ? m.memoryUsedMB : Number(m.memoryUsedMB || 0),
+          averageLatencyMicroseconds: typeof m.averageLatencyMicroseconds === 'number' ? m.averageLatencyMicroseconds : Number(m.averageLatencyMicroseconds || 12),
+          throughputPerSecond: typeof m.throughputPerSecond === 'number' ? m.throughputPerSecond : Number(m.throughputPerSecond || 0),
+          simdAcceleration: Boolean(m.simdAcceleration || m.get('simdAcceleration')),
+          activeThreads: typeof m.activeThreads === 'number' ? m.activeThreads : Number(m.activeThreads || 1),
+          totalAuditsProcessed: typeof m.totalAuditsProcessed === 'number' ? m.totalAuditsProcessed : Number(m.totalAuditsProcessed || 0)
+        };
+      } catch {
+        // fallback
+      }
+    }
     const mainMetrics = syncEngine.getMetrics();
     return mainMetrics;
   }

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development UV_THREADPOOL_SIZE=128 tsx server.ts",
     "build:worker": "npx esbuild src/EngineWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile=server-build/EngineWorker.js",
+    "build:native": "node-gyp rebuild",
     "build": "npm run build:worker && cross-env NODE_OPTIONS=--max-old-space-size=450 npx vite build && cross-env NODE_OPTIONS=--max-old-space-size=450 npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=server-build/server.cjs",
     "start": "cross-env NODE_ENV=production node server-build/server.cjs",
     "clean": "rm -rf dist server-build server.js",
@@ -17,6 +18,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@types/node": "^22.14.0",
     "@vitest/coverage-v8": "^3.0.0",
     "vitest": "^3.0.0"
   },
@@ -28,7 +30,6 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
     "@types/libsodium-wrappers": "^0.7.14",
-    "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "cookie-parser": "^1.4.7",
@@ -54,5 +55,8 @@
     "tweetnacl": "^1.0.3",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
+  },
+  "optionalDependencies": {
+    "node-addon-api": "^7.0.0"
   }
 }
