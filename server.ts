@@ -1284,17 +1284,21 @@ app.get("/api/security/ultra-stats", requireAdminAuth, (req, res) => {
   });
 });
 
-app.post("/api/security/rotate-token", requireAdminAuth, heavyOpRateLimit, (req, res) => {
+app.post("/api/security/rotate-token", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   logAdminAuditAction("ROTATE_BOT_TOKEN", req);
   const { newToken } = req.body || {};
   const tokenToUse = newToken || process.env.DISCORD_BOT_TOKEN;
   if (!tokenToUse) {
     return res.status(400).json({ success: false, error: "No token provided for rotation." });
   }
-  const rotated = BotTokenRotationSystem.rotateTokenInMemory(tokenToUse);
-  if (rotated) {
-    addBotLog("[SECURITY] Executed AES-256 Bot Token Rotation in Memory Vault.", "success");
-    return res.json({ success: true, message: "Bot token rotated and encrypted in AES-256 Vault." });
+  try {
+    const rotated = await BotTokenRotationSystem.rotateTokenInMemory(tokenToUse);
+    if (rotated) {
+      addBotLog("[SECURITY] Bot token rotated and reconnection attempted.", "success");
+      return res.json({ success: true, message: "Bot token rotated and reconnection attempted." });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: "Token rotation failed: " + err.message });
   }
   res.status(400).json({ success: false, error: "Invalid token format for rotation." });
 });
@@ -1868,13 +1872,17 @@ app.get("/api/premium/info", requireAdminAuth, (req, res) => {
   });
 });
 
-app.post("/api/premium/activate", requireAdminAuth, (req, res) => {
+app.post("/api/premium/activate", requireAdminAuth, async (req, res) => {
   logAdminAuditAction("ACTIVATE_PREMIUM_LICENSE", req);
   const { licenseKey } = req.body || {};
-  const valid = PremiumLicenseSystem.validateLicense(licenseKey || "");
-  if (valid) {
-    addBotLog(`Premium License Activated: ${licenseKey}`, "success");
-    return res.json({ success: true, message: "Premium Enterprise License activated successfully!" });
+  try {
+    const valid = await PremiumLicenseSystem.validateLicenseRemote(licenseKey || "");
+    if (valid) {
+      addBotLog(`Premium License Activated: ${licenseKey}`, "success");
+      return res.json({ success: true, message: "Premium Enterprise License activated successfully!" });
+    }
+  } catch (err: any) {
+    console.error("License verification error:", err);
   }
   res.status(400).json({ success: false, error: "Invalid license key. Format: PREMIUM-ENT-XXXX-XXXX-XXXX" });
 });
@@ -2501,8 +2509,12 @@ async function setupServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on port ${PORT}`);
+    // Initialize Redis connection if configured
+    await MongoRedisEngine.initRedis().catch((err) => {
+      console.warn("Redis initialization failed:", err);
+    });
     // Auto-start Discord Bot on startup
     startDiscordBot().catch((err) => {
       console.error("Failed to auto-start Discord bot:", err);

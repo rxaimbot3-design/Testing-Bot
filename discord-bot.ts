@@ -1743,6 +1743,14 @@ export async function startDiscordBot() {
   EnvScanner.scan();
   CanaryToken.setup();
   CppNativeEngine.initEngine().catch(() => {});
+  BotTokenRotationSystem.setReconnectHandler(async (newToken) => {
+    addBotLog("[TOKEN-ROTATION] Reconnecting bot with new token...", "warning");
+    await stopDiscordBot();
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    process.env.DISCORD_BOT_TOKEN = newToken;
+    process.env.DISCORD_TOKEN = newToken;
+    await startDiscordBot();
+  });
 
   if (!token || token.length < 50 || token.includes("placeholder") || token.includes("your_token") || token.includes("token_here")) {
     addBotLog("DISCORD_BOT_TOKEN is not configured or invalid. Bot is offline.", "warning");
