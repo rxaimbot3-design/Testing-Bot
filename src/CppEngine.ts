@@ -5,7 +5,9 @@ import { Worker } from "worker_threads";
 import { createRequire } from "module";
 import { createHash } from "crypto";
 
-const __filename = fileURLToPath(import.meta.url);
+const __filename = typeof import.meta !== "undefined" && import.meta.url
+  ? fileURLToPath(import.meta.url)
+  : process.argv[1] || ".";
 const __dirname = path.dirname(__filename);
 
 const requireNative = (() => {
