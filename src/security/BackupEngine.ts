@@ -10,6 +10,7 @@ export interface BackupMetadata {
   encrypted: boolean;
   checksum: string;
   label?: string;
+  baseId?: string;
 }
 
 export class BackupEngine {
@@ -17,17 +18,29 @@ export class BackupEngine {
   private static encryptionKey: Buffer | null = null;
   private static retentionDays = 30;
 
-  static init(encryptionKeyHex?: string): void {
+  static init(encryptionKeyHex?: string, backupDir?: string): void {
+    if (backupDir) {
+      this.backupDir = backupDir;
+    }
     if (!fs.existsSync(this.backupDir)) {
       fs.mkdirSync(this.backupDir, { recursive: true });
     }
     if (encryptionKeyHex) {
       this.encryptionKey = Buffer.from(encryptionKeyHex, "hex");
+    } else {
+      this.encryptionKey = null;
     }
   }
 
   static setRetentionDays(days: number): void {
     this.retentionDays = days;
+  }
+
+  static setBackupDir(dir: string): void {
+    this.backupDir = dir;
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 
   static encrypt(data: string): string {
@@ -115,6 +128,7 @@ export class BackupEngine {
     fs.writeFileSync(path.join(this.backupDir, `${id}.json`), JSON.stringify(record, null, 2));
     return {
       id,
+      baseId,
       timestamp: record.timestamp,
       version: record.version,
       size: record.size,
@@ -190,7 +204,7 @@ export class BackupEngine {
     return true;
   }
 
-  static testRestore(backupId: string): { success: boolean; message: string } {
+  static testRestore(backupId: string): { success: boolean; message: string; data?: any } {
     try {
       const data = this.restoreBackup(backupId, true);
       return { success: true, message: `Backup ${backupId} restored successfully`, data };
@@ -225,6 +239,13 @@ export class BackupEngine {
   }
 
   private static enforceRetention(): void {
+    if (this.retentionDays <= 0) {
+      const backups = this.listBackups();
+      for (const backup of backups) {
+        this.deleteBackup(backup.id);
+      }
+      return;
+    }
     const cutoff = Date.now() - this.retentionDays * 24 * 60 * 60 * 1000;
     const backups = this.listBackups();
     for (const backup of backups) {

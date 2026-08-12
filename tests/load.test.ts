@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SecurityPipeline, type SecurityEvent } from "../src/security/Pipeline.js";
 import { CppNativeEngine } from "../src/CppEngine.js";
+import request from "supertest";
 
 const CONCURRENT_LEVELS = [1000, 10000];
 
@@ -111,7 +112,7 @@ describe("Load: Rate Limiting", () => {
     }));
 
     vi.mock("../src/SecurityFeatures", async () => {
-      const actual = await vi.importActual("../src/SecurityFeatures");
+      const actual: any = await vi.importActual("../src/SecurityFeatures");
       return {
         ...actual,
         MongoRedisEngine: {

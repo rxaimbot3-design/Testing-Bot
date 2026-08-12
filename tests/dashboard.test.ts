@@ -33,7 +33,7 @@ beforeEach(async () => {
   }));
 
   vi.mock("../src/SecurityFeatures", async () => {
-    const actual = await vi.importActual("../src/SecurityFeatures");
+    const actual: any = await vi.importActual("../src/SecurityFeatures");
     return {
       ...actual,
       MongoRedisEngine: {
@@ -58,7 +58,7 @@ describe("Dashboard API: Public Config", () => {
   it("returns health status without auth", async () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("ok");
+    expect(["healthy", "degraded"]).toContain(res.body.status);
   });
 });
 

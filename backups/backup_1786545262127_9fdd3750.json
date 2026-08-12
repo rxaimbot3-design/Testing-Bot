@@ -1,0 +1,9 @@
+{
+  "id": "backup_1786545262127_9fdd3750",
+  "timestamp": "2026-08-12T14:34:22.127Z",
+  "version": 712,
+  "size": 393,
+  "encrypted": false,
+  "checksum": "e71fb580f2d437a86728546532d968d1657a3ea8fae7d3f50b139796e6bc3a3e",
+  "data": "{\"id\":\"d3b553e84df1622f047de97b99b4754c\",\"value\":\"dc62cf5051e21fdda04a424bd2f8346acd5ac5a3b58a4a4e0331f2af80a33d14b348ddc2bd52be25a9c1601a73b0d39956cd9331a38c49f2f0646324b6c32ddcec7bdccab5a8ab34a82e1441b7da7b7cdd73fd0e51785f12c2db9f91fd02a0d0d97ed327701b458e3f26a6d26e12b7ad40d0da4832ec22a6dda31dc5298f5b8d\",\"nested\":{\"deep\":\"495d48bfb935fff04e92cfa6b7dc9c8a60dae14330cac1a412db645f45e87906\"}}"
+}

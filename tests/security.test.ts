@@ -37,7 +37,7 @@ describe("Security: Token Hashing Consistency", () => {
 
 describe("Security: Secret Pattern Detection Edge Cases", () => {
   it("detects GitHub tokens with mixed case", () => {
-    const content = "token: ghp_AbCdEf1234567890ABCDEF1234567890AB";
+    const content = "token: ghp_AbCdEf1234567890ABCDEF1234567890AB12";
     const findings = scanForSecrets(content);
     expect(findings.length).toBeGreaterThanOrEqual(1);
   });

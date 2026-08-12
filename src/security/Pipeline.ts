@@ -63,11 +63,11 @@ export class SecurityPipeline {
 
     switch (event.type) {
       case "channel_create":
-        score += this.checkBurst(key, history, now, this.thresholds.massChannelCreate) * 30;
+        score += this.checkBurst(key, history, now, this.thresholds.massChannelCreate) * 40;
         break;
       case "role_create":
       case "role_update":
-        score += this.checkBurst(key, history, now, this.thresholds.massRoleModify) * 25;
+        score += this.checkBurst(key, history, now, this.thresholds.massRoleModify) * 50;
         break;
       case "permission_update":
         score += this.checkBurst(key, history, now, this.thresholds.permissionEscalation) * 40;
@@ -80,7 +80,7 @@ export class SecurityPipeline {
         score += 20;
         break;
       default:
-        score += this.checkBurst(key, history, now, this.thresholds.burst) * 10;
+        score += this.checkBurst(key, history, now, this.thresholds.burst) * 30;
     }
 
     if (event.payload && event.payload.massAction) {

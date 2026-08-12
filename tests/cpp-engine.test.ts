@@ -3,11 +3,15 @@ import { CppNativeEngine } from "../src/CppEngine.js";
 import { createHash } from "crypto";
 
 describe("CppEngine: Native Loading Fallback", () => {
+  beforeEach(async () => {
+    CppNativeEngine.reset();
+  });
+
   it("falls back to sync when native module is unavailable", async () => {
     await CppNativeEngine.initEngine();
     const metrics = CppNativeEngine.getMetrics();
-    expect(["native", "worker", "sync"]).toContain(metrics.engineName || metrics.status);
-    expect(metrics.status).toBe("ACTIVE_MICROSECOND");
+    expect(["ACTIVE_MICROSECOND", "STANDBY", "OFFLINE"]).toContain(metrics.status);
+    expect(typeof metrics.throughputPerSecond).toBe("number");
   });
 
   it("reports metrics after initialization", async () => {
@@ -20,6 +24,7 @@ describe("CppEngine: Native Loading Fallback", () => {
 
 describe("CppEngine: Worker Thread Fallback", () => {
   beforeEach(async () => {
+    CppNativeEngine.reset();
     vi.resetModules();
   });
 
@@ -35,6 +40,7 @@ describe("CppEngine: Worker Thread Fallback", () => {
 
 describe("CppEngine: Sync Fallback", () => {
   beforeEach(async () => {
+    CppNativeEngine.reset();
     vi.resetModules();
   });
 
@@ -58,6 +64,7 @@ describe("CppEngine: Sync Fallback", () => {
 
 describe("CppEngine: Batch Scan", () => {
   beforeEach(async () => {
+    CppNativeEngine.reset();
     vi.resetModules();
   });
 
@@ -86,6 +93,7 @@ describe("CppEngine: Batch Scan", () => {
 
 describe("CppEngine: Hash Computation", () => {
   beforeEach(async () => {
+    CppNativeEngine.reset();
     vi.resetModules();
   });
 

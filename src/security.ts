@@ -1,14 +1,16 @@
 import crypto from "crypto";
 
 export function hashToken(token: string): string {
+  if (!token || typeof token !== "string") return crypto.createHash("sha256").update("").digest("hex");
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 export function scanForSecrets(content: string): string[] {
   const findings: string[] = [];
+  if (!content || typeof content !== "string") return findings;
   const patterns = [
-    /ghp_[a-zA-Z0-9]{36}/g,
-    /AIzaSy[a-zA-Z0-9_-]{33}/g,
+    /ghp_[a-zA-Z0-9]{36}/gi,
+    /AIzaSy[a-zA-Z0-9_-]{33}/gi,
     /M[A-Za-z0-9_-]{23,28}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,38}/g,
     /xox[baprs]-[0-9a-zA-Z-]+/g,
     /sk_live_[0-9a-zA-Z]{24,}/g,

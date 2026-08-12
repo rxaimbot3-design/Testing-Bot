@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { SecurityPipeline, type SecurityEvent } from "../src/security/Pipeline.js";
 import { scanForSecrets, validateInput } from "../src/security.js";
 import { BackupEngine } from "../src/security/BackupEngine.js";
+import request from "supertest";
 import crypto from "crypto";
 
 const FUZZ_ITERATIONS = 500;
@@ -112,7 +113,7 @@ describe("Fuzz: API Endpoints", { retry: 0 }, () => {
     }));
 
     vi.mock("../src/SecurityFeatures", async () => {
-      const actual = await vi.importActual("../src/SecurityFeatures");
+      const actual: any = await vi.importActual("../src/SecurityFeatures");
       return {
         ...actual,
         MongoRedisEngine: {

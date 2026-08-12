@@ -287,6 +287,14 @@ class WorkerEngine {
     }
   }
 
+  reset() {
+    this.workerReady = false;
+    this.worker = null;
+    this.pendingRequests.clear();
+    this.requestId = 0;
+    this.fallbackCounter = 0;
+  }
+
   private fallbackScanBatch(requests: ScanRequest[]): Array<{ passed: boolean; latencyMicros: number; score: number }> {
     const view32 = this.fallbackBuffer?.view32;
     if (!view32) {
@@ -425,6 +433,16 @@ export class CppNativeEngine {
   private static initialized = false;
   private static engineMode: "native" | "worker" | "sync" = "sync";
 
+  static reset(): void {
+    this.initialized = false;
+    this.engineMode = "sync";
+    workerEngine.reset();
+    syncEngine.resetMetrics();
+    nativeInstance = null;
+    nativeAvailable = false;
+    nativeModule = null;
+  }
+
   static async initEngine() {
     if (this.initialized) return;
 
@@ -458,9 +476,11 @@ export class CppNativeEngine {
   }
 
   static scanSecurityPacket(packetId: number, riskWeight: number): { passed: boolean; latencyMicros: number; score: number } {
+    const safePacketId = Number.isFinite(packetId) ? Math.floor(packetId) : 0;
+    const safeRiskWeight = Number.isFinite(riskWeight) ? Math.max(0, Math.min(1000, riskWeight)) : 0;
     if (this.engineMode === "native" && nativeInstance) {
       try {
-        const result = nativeInstance.scanPacket(packetId, riskWeight);
+        const result = nativeInstance.scanPacket(safePacketId, safeRiskWeight);
         return {
           passed: Boolean(result.passed),
           latencyMicros: typeof result.latencyMicros === 'number' ? result.latencyMicros : Number(result.latencyMicros),
@@ -470,7 +490,7 @@ export class CppNativeEngine {
         // fallback to sync
       }
     }
-    return syncEngine.scanSecurityPacket(packetId, riskWeight);
+    return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
   }
 
   static async batchScanPackets(requests: ScanRequest[]): Promise<Array<{ passed: boolean; latencyMicros: number; score: number }>> {

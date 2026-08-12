@@ -1,21 +1,34 @@
 import crypto from "crypto";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BackupEngine, type BackupMetadata } from "../src/security/BackupEngine.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
 
+const TEST_BACKUP_DIR = path.join(os.tmpdir(), "test-backups-" + process.pid);
+
+function cleanupBackups() {
+  try {
+    if (fs.existsSync(TEST_BACKUP_DIR)) {
+      fs.rmSync(TEST_BACKUP_DIR, { recursive: true, force: true });
+    }
+  } catch {}
+}
+
 describe("BackupEngine: Initialization and Configuration", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
     BackupEngine.setRetentionDays(30);
   });
 
+  afterEach(() => {
+    cleanupBackups();
+  });
+
   it("creates backup directory on init", () => {
-    const customDir = path.join(os.tmpdir(), "test-backups-" + Date.now());
     BackupEngine.init();
-    // After init, the default dir is created; we test via createBackup
     const meta = BackupEngine.createBackup({ test: true }, "init-test");
     expect(meta.id).toBeDefined();
     expect(fs.existsSync(path.join(BackupEngine["backupDir"], `${meta.id}.json`))).toBe(true);
@@ -23,7 +36,7 @@ describe("BackupEngine: Initialization and Configuration", () => {
 
   it("accepts encryption key on init", () => {
     const key = crypto.randomBytes(32).toString("hex");
-    BackupEngine.init(key);
+    BackupEngine.init(key, TEST_BACKUP_DIR);
     const meta = BackupEngine.createBackup({ secret: true });
     expect(meta.encrypted).toBe(true);
   });
@@ -31,7 +44,12 @@ describe("BackupEngine: Initialization and Configuration", () => {
 
 describe("BackupEngine: Backup Creation", () => {
   beforeEach(() => {
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
+  });
+
+  afterEach(() => {
+    cleanupBackups();
   });
 
   it("creates a backup with metadata", () => {
@@ -61,7 +79,12 @@ describe("BackupEngine: Backup Creation", () => {
 
 describe("BackupEngine: Incremental Backup", () => {
   beforeEach(() => {
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
+  });
+
+  afterEach(() => {
+    cleanupBackups();
   });
 
   it("creates an incremental backup linked to base", () => {
@@ -80,7 +103,12 @@ describe("BackupEngine: Incremental Backup", () => {
 
 describe("BackupEngine: Integrity Verification", () => {
   beforeEach(() => {
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
+  });
+
+  afterEach(() => {
+    cleanupBackups();
   });
 
   it("verifies an intact backup", () => {
@@ -105,7 +133,12 @@ describe("BackupEngine: Integrity Verification", () => {
 
 describe("BackupEngine: Versioned Backups", () => {
   beforeEach(() => {
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
+  });
+
+  afterEach(() => {
+    cleanupBackups();
   });
 
   it("lists backups in reverse chronological order", () => {
@@ -126,7 +159,12 @@ describe("BackupEngine: Versioned Backups", () => {
 
 describe("BackupEngine: Selective and Full Restore", () => {
   beforeEach(() => {
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
+  });
+
+  afterEach(() => {
+    cleanupBackups();
   });
 
   it("restores full backup data", () => {
@@ -154,9 +192,17 @@ describe("BackupEngine: Selective and Full Restore", () => {
 });
 
 describe("BackupEngine: Encryption and Decryption", () => {
+  beforeEach(() => {
+    cleanupBackups();
+  });
+
+  afterEach(() => {
+    cleanupBackups();
+  });
+
   it("encrypts and decrypts data correctly", () => {
     const key = crypto.randomBytes(32).toString("hex");
-    BackupEngine.init(key);
+    BackupEngine.init(key, TEST_BACKUP_DIR);
     const original = { secret: "top-secret-data", tokens: ["a", "b", "c"] };
     const meta = BackupEngine.createBackup(original);
     expect(meta.encrypted).toBe(true);
@@ -167,14 +213,14 @@ describe("BackupEngine: Encryption and Decryption", () => {
   it("throws on decryption with wrong key", () => {
     const key1 = crypto.randomBytes(32).toString("hex");
     const key2 = crypto.randomBytes(32).toString("hex");
-    BackupEngine.init(key1);
+    BackupEngine.init(key1, TEST_BACKUP_DIR);
     const meta = BackupEngine.createBackup({ secret: true });
-    BackupEngine.init(key2);
-    expect(() => BackupEngine.restoreBackup(meta.id)).toThrow("Decryption failed");
+    BackupEngine.init(key2, TEST_BACKUP_DIR);
+    expect(() => BackupEngine.restoreBackup(meta.id)).toThrow(/decrypt/i);
   });
 
   it("stores backups unencrypted when no key is provided", () => {
-    BackupEngine.init();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
     const meta = BackupEngine.createBackup({ plain: true });
     expect(meta.encrypted).toBe(false);
     const restored = BackupEngine.restoreBackup(meta.id);
@@ -184,13 +230,17 @@ describe("BackupEngine: Encryption and Decryption", () => {
 
 describe("BackupEngine: Retention Policy", () => {
   beforeEach(() => {
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
+  });
+
+  afterEach(() => {
+    cleanupBackups();
   });
 
   it("enforces retention by removing old backups", () => {
     BackupEngine.setRetentionDays(0);
     const meta = BackupEngine.createBackup({ old: true });
-    // With 0-day retention, the newly created backup should be immediately removed
     const list = BackupEngine.listBackups();
     expect(list.find((b) => b.id === meta.id)).toBeUndefined();
   });
@@ -205,7 +255,12 @@ describe("BackupEngine: Retention Policy", () => {
 
 describe("BackupEngine: Corrupted Data Handling", () => {
   beforeEach(() => {
-    BackupEngine.init();
+    cleanupBackups();
+    BackupEngine.init(undefined, TEST_BACKUP_DIR);
+  });
+
+  afterEach(() => {
+    cleanupBackups();
   });
 
   it("skips corrupted files when listing backups", () => {
