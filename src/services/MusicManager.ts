@@ -3,7 +3,7 @@ export interface MusicTrack {
   title: string;
   artist: string;
   durationSeconds: number;
-  url?: string;
+  url?: string | ReadableStream<any>;
   thumbnail?: string;
   requestedBy?: string;
 }
@@ -64,7 +64,7 @@ export async function getAudioStreamDetails(query: string) {
         let searchQuery = cleanQuery;
 
         if (lowerQuery.includes("youtube.com") || lowerQuery.includes("youtu.be")) {
-          const urlMatch = cleanQuery.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+          const urlMatch = cleanQuery.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/live\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
           if (urlMatch) youtubeId = urlMatch[1];
         } else if (lowerQuery.includes("spotify.com")) {
           const spotifyMatch = cleanQuery.match(/track\/([a-zA-Z0-9]+)/);
@@ -118,6 +118,24 @@ export async function getAudioStreamDetails(query: string) {
               artist = ytDetails.channel?.name || artist;
               durationSeconds = Math.round((ytDetails.durationInSec || 210));
               thumbnail = ytDetails.thumbnails?.[0]?.url || thumbnail;
+
+              // Try play-dl stream helper for Discord voice compatibility
+              try {
+                const streamResult = await (play as any).stream_from_info(ytInfo);
+                if (streamResult && streamResult.stream) {
+                  return {
+                    songUrl: streamResult.stream,
+                    title,
+                    artist,
+                    durationSeconds,
+                    thumbnail,
+                    isPlayDlStream: true
+                  };
+                }
+              } catch (streamErr) {
+                console.error("play-dl stream_from_info error:", streamErr);
+              }
+
               const streams = (ytInfo as any).streams;
               if (streams && streams.length > 0) {
                 songUrl = streams[0].url || songUrl;

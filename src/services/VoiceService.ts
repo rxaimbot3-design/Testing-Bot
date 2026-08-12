@@ -1,3 +1,4 @@
+import { Readable } from "stream";
 import { 
   joinVoiceChannel, 
   getVoiceConnection,
@@ -13,7 +14,7 @@ import { getOrCreateGuildMusicState } from './MusicManager.js';
 const guildPlayers = new Map<string, ReturnType<typeof createAudioPlayer>>();
 const guildResources = new Map<string, any>();
 
-export async function playAudioInGuild(guildId: string, audioUrl: string, targetChannelId?: string): Promise<boolean> {
+export async function playAudioInGuild(guildId: string, audioUrl: string | Readable | ReadableStream<any>, targetChannelId?: string): Promise<boolean> {
   let logFunc = addBotLog || ((msg: string) => console.log(msg));
   try {
     const client = getClient();
@@ -67,6 +68,30 @@ export async function playAudioInGuild(guildId: string, audioUrl: string, target
         guildPlayers.delete(guild.id);
         guildResources.delete(guild.id);
       });
+
+      // Wait for voice connection to be ready before playing
+      await new Promise((resolve, reject) => {
+        if (connection.state.status === VoiceConnectionStatus.Ready) {
+          resolve(true);
+          return;
+        }
+        const timeout = setTimeout(() => {
+          reject(new Error("Voice connection timeout"));
+        }, 10000);
+
+        connection.on(VoiceConnectionStatus.Ready, () => {
+          clearTimeout(timeout);
+          resolve(true);
+        });
+
+        connection.on(VoiceConnectionStatus.Disconnected, () => {
+          clearTimeout(timeout);
+          reject(new Error("Voice connection disconnected"));
+        });
+      }).catch((err) => {
+        logFunc(`❌ Voice connection failed in ${guild.name}: ${err.message}`, "error");
+        return false;
+      });
     }
 
     let player = guildPlayers.get(guild.id);
@@ -84,10 +109,28 @@ export async function playAudioInGuild(guildId: string, audioUrl: string, target
       });
     }
 
-    const resource = createAudioResource(audioUrl, {
-      inputType: StreamType.Arbitrary,
-      inlineVolume: true,
-    });
+    let resource;
+    try {
+      const isStream = typeof audioUrl !== 'string';
+      const resourceOptions: any = {
+        inlineVolume: true,
+      };
+
+      if (isStream) {
+        // play-dl returned a readable stream
+        resourceOptions.inputType = StreamType.Arbitrary;
+        console.log(`[VoiceService] Creating audio resource from play-dl stream in ${guild.name}`);
+      } else {
+        console.log(`[VoiceService] Creating audio resource from URL: ${audioUrl.substring(0, 100)}... in ${guild.name}`);
+      }
+
+      resource = createAudioResource(audioUrl as any, resourceOptions);
+      console.log(`[VoiceService] Audio resource created successfully in ${guild.name}`);
+    } catch (resourceErr: any) {
+      console.error("Failed to create audio resource:", resourceErr);
+      logFunc(`❌ Failed to load audio stream: ${resourceErr.message}. The stream may be invalid or incompatible.`, "error");
+      return false;
+    }
 
     const state = getOrCreateGuildMusicState(guild.id);
     if (resource.volume) {
