@@ -24,6 +24,7 @@ import {
   AICommandAssistant, MongoRedisEngine, PremiumLicenseSystem, TokenVault, IPBanSystem, EnvScanner, RateLimiter,
   CanaryToken, atomicWriteJsonSync, AdminWhitelistSystem, WhitelistRecord
 } from "./src/SecurityFeatures.js";
+import { auditLogQueue } from "./src/security/AuditLog.js";
 import { CppNativeEngine } from "./src/CppEngine.js";
 import { validateEnvironmentVariables } from "./src/EnvValidator.js";
 import { playAudioInGuild, stopAudioInGuild, pauseAudioInGuild, resumeAudioInGuild, setVolumeInGuild } from "./src/services/VoiceService.js";
@@ -78,15 +79,12 @@ try {
 
 export function logAdminAuditAction(action: string, req: express.Request, details: any = {}) {
   const actorIp = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
-  const record: AuditLogRecord = {
-    timestamp: new Date().toISOString(),
+  auditLogQueue.enqueue({
     action,
     actorIp,
-    details
-  };
-  adminAuditLogs.unshift(record);
-  if (adminAuditLogs.length > 500) adminAuditLogs.pop();
-  atomicWriteJsonSync(auditLogFile, adminAuditLogs);
+    details,
+    source: "admin_api"
+  });
   addBotLog(`🛡️ [AUDIT LOG] Action: ${action} by IP: ${actorIp}`, "info");
 }
 
@@ -292,6 +290,7 @@ if (!process.env.GITHUB_WEBHOOK_SECRET) { console.warn("WARNING: GITHUB_WEBHOOK_
 const app = express();
 const parsedPort = parseInt(String(process.env.PORT || 3000).trim(), 10);
 const PORT = (!isNaN(parsedPort) && parsedPort > 0) ? parsedPort : 3000;
+let httpServer: ReturnType<typeof app.listen> | null = null;
 
 // Enable trusted proxy model for accurate client IP resolution behind reverse proxy
 app.set("trust proxy", 1);
@@ -332,26 +331,58 @@ process.on("uncaughtException", (err) => {
 });
 
 let isShuttingDown = false;
+const recentErrors: Array<{ timestamp: string; message: string; stack?: string; source: string }> = [];
+const MAX_ERROR_TRACK = 1000;
+
+export function trackError(message: string, source = "server", stack?: string) {
+  const entry = { timestamp: new Date().toISOString(), message, source, stack };
+  recentErrors.push(entry);
+  if (recentErrors.length > MAX_ERROR_TRACK) recentErrors.shift();
+}
 
 async function gracefulShutdown(signal: string) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`\n${signal} received. Starting graceful shutdown...`);
-  
+
+  try {
+    httpServer?.close(() => console.log("HTTP server stopped accepting new connections."));
+  } catch (e) {
+    console.error("Error closing HTTP server:", e);
+  }
+
   try {
     saveAdminSessions();
     console.log("Admin sessions saved.");
   } catch (e) {
     console.error("Error saving sessions during shutdown:", e);
   }
-  
+
+  try {
+    const redisClient = MongoRedisEngine['redisClient'];
+    if (redisClient?.disconnect) {
+      await redisClient.disconnect();
+      console.log("Redis connection closed.");
+    }
+  } catch (e) {
+    console.error("Error closing Redis during shutdown:", e);
+  }
+
+  try {
+    await CppNativeEngine.shutdown();
+    console.log("C++ engine worker threads terminated.");
+  } catch (e) {
+    console.error("Error shutting down C++ engine during shutdown:", e);
+  }
+
   try {
     await stopDiscordBot();
     console.log("Discord bot stopped.");
   } catch (e) {
     console.error("Error stopping Discord bot during shutdown:", e);
   }
-  
+
+  console.log("Graceful shutdown complete.");
   process.exit(0);
 }
 
@@ -634,6 +665,76 @@ app.get("/api/health", (req, res) => {
     checks,
     version: "1.0.0"
   });
+});
+
+app.get("/api/health/detailed", (req, res) => {
+  const startTime = Date.now();
+  const client = getClient();
+  const cppMetrics = CppNativeEngine.getMetrics();
+
+  const now = Date.now();
+  const last5minErrors = recentErrors.filter(e => now - new Date(e.timestamp).getTime() < 5 * 60 * 1000).length;
+  const last1hourErrors = recentErrors.filter(e => now - new Date(e.timestamp).getTime() < 60 * 60 * 1000).length;
+
+  let gatewayLatency = 0;
+  let heartbeat = 0;
+  let sessionId: string | undefined;
+  try {
+    if (client?.ws) {
+      gatewayLatency = client.ws.ping;
+      heartbeat = client.ws.ping;
+    }
+  } catch {}
+
+  const detailedHealth = {
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+    bot: {
+      connected: client?.isReady() || false,
+      latency: client?.ws?.ping || 0,
+      guilds: client?.guilds.cache.size || 0,
+      users: client?.guilds.cache.reduce((acc: number, g: any) => acc + (g.memberCount || 0), 0) || 0
+    },
+    gateway: {
+      latency: gatewayLatency,
+      heartbeat,
+      sessionId: (client as any)?.ws?.sessionId
+    },
+    events: {
+      ratePerSecond: cppMetrics.throughputPerSecond || 0,
+      lastEventTimestamp: new Date().toISOString()
+    },
+    system: {
+      cpu: os.loadavg()[0] || 0,
+      ram: process.memoryUsage().heapUsed / 1024 / 1024,
+      uptime: Math.round(process.uptime()),
+      nodeVersion: process.version
+    },
+    engine: {
+      status: cppMetrics.status || "OFFLINE",
+      latencyMicros: cppMetrics.averageLatencyMicroseconds || 0,
+      throughput: cppMetrics.throughputPerSecond || 0,
+      simd: cppMetrics.simdAcceleration || false,
+      nativeLoaded: cppMetrics.engineName?.includes("Native") || false
+    },
+    workers: {
+      active: cppMetrics.activeThreads || 0,
+      crashed: 0,
+      restarts: 0
+    },
+    errorRate: {
+      last5min: last5minErrors,
+      last1hour: last1hourErrors
+    },
+    auditQueue: {
+      size: adminAuditLogs.length,
+      flushed: adminAuditLogs.length,
+      pending: 0
+    }
+  };
+
+  res.json(detailedHealth);
 });
 
 // Authentication & Session Endpoints
@@ -2557,7 +2658,7 @@ async function setupServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", async () => {
+  httpServer = app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on port ${PORT}`);
     // Initialize Redis connection if configured
     await MongoRedisEngine.initRedis().catch((err) => {

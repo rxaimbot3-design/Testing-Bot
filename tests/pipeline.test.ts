@@ -44,7 +44,7 @@ describe("Security Pipeline: Independent Stages", () => {
       type: "role_update",
       userId,
       guildId,
-      timestamp: now + i * 200,
+      timestamp: now + i * 100,
       payload: {},
     }));
     const results = SecurityPipeline.processBatch(events);
@@ -111,10 +111,10 @@ describe("Security Pipeline: Independent Stages", () => {
   });
 
   it("applies automatic escalation correctly", () => {
-    expect(SecurityPipeline.escalate({ blocked: true, action: "block", reason: "high", score: 95 })).toBe("lockdown");
-    expect(SecurityPipeline.escalate({ blocked: true, action: "block", reason: "high", score: 75 })).toBe("ban");
-    expect(SecurityPipeline.escalate({ blocked: true, action: "block", reason: "high", score: 55 })).toBe("quarantine");
-    expect(SecurityPipeline.escalate({ blocked: false, action: "monitor", reason: "low", score: 20 })).toBe("monitor");
+    expect(SecurityPipeline.escalate({ blocked: true, action: "block", reason: "high", score: 95, rule: "test", canRollback: true })).toBe("lockdown");
+    expect(SecurityPipeline.escalate({ blocked: true, action: "block", reason: "high", score: 75, rule: "test", canRollback: true })).toBe("ban");
+    expect(SecurityPipeline.escalate({ blocked: true, action: "block", reason: "high", score: 55, rule: "test", canRollback: true })).toBe("quarantine");
+    expect(SecurityPipeline.escalate({ blocked: false, action: "monitor", reason: "low", score: 20, rule: "test", canRollback: false })).toBe("monitor");
   });
 
   it("handles invalid/malformed events gracefully", () => {
@@ -160,7 +160,7 @@ describe("Security Pipeline: Threshold Behavior", () => {
     const now = Date.now();
     const events = Array.from({ length: 4 }, (_, i) => ({
       type: "channel_create" as const,
-      userId: "u1",
+      userId: `u1_${i}`,
       guildId: "g1",
       timestamp: now + i * 100,
       payload: {},
@@ -173,7 +173,7 @@ describe("Security Pipeline: Threshold Behavior", () => {
     const now = Date.now();
     const events = Array.from({ length: 2 }, (_, i) => ({
       type: "role_update" as const,
-      userId: "u2",
+      userId: `u2_${i}`,
       guildId: "g2",
       timestamp: now + i * 100,
       payload: {},

@@ -138,18 +138,18 @@ async function main() {
   // 2. Native C++ scanPacket
   // ----------------------------------------------------------
   results.push(await runBenchmark("Native scanPacket (1K)", async () => {
-    CppNativeEngine.scanSecurityPacket(Math.floor(Math.random() * 10000), 1.2);
+    CppNativeEngine.scanSecurityPacket(Math.floor(Math.random() * 10000), Math.random() * 10);
   }, 1000));
 
   results.push(await runBenchmark("Native scanPacket (10K)", async () => {
-    CppNativeEngine.scanSecurityPacket(Math.floor(Math.random() * 10000), 1.2);
+    CppNativeEngine.scanSecurityPacket(Math.floor(Math.random() * 10000), Math.random() * 10);
   }, 10000));
 
   // ----------------------------------------------------------
   // 3. Native C++ scanBatch
   // ----------------------------------------------------------
   const buildBatch = (n: number) =>
-    Array.from({ length: n }, (_, i) => ({ packetId: i, riskWeight: Math.random() * 5 }));
+    Array.from({ length: n }, (_, i) => ({ packetId: i, riskWeight: Math.random() * 5, eventType: Math.floor(Math.random() * 3), channelCount: Math.floor(Math.random() * 10) }));
 
   results.push(await runBenchmark("Native scanBatch (1K)", async () => {
     await CppNativeEngine.batchScanPackets(buildBatch(1000));
@@ -157,6 +157,10 @@ async function main() {
 
   results.push(await runBenchmark("Native scanBatch (10K)", async () => {
     await CppNativeEngine.batchScanPackets(buildBatch(10000));
+  }, 1));
+
+  results.push(await runBenchmark("Native scanBatch (100K)", async () => {
+    await CppNativeEngine.batchScanPackets(buildBatch(100000));
   }, 1));
 
   // ----------------------------------------------------------
@@ -168,15 +172,33 @@ async function main() {
     );
   }, 1));
 
+  results.push(await runBenchmark("Native SHA-256 (10K)", async () => {
+    await CppNativeEngine.batchComputeHashes(
+      Array.from({ length: 10000 }, () => ({ data: testData, algorithm: "sha256" as const }))
+    );
+  }, 1));
+
   results.push(await runBenchmark("Native SHA-512 (1K)", async () => {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "sha512" as const }))
     );
   }, 1));
 
+  results.push(await runBenchmark("Native SHA-512 (10K)", async () => {
+    await CppNativeEngine.batchComputeHashes(
+      Array.from({ length: 10000 }, () => ({ data: testData, algorithm: "sha512" as const }))
+    );
+  }, 1));
+
   results.push(await runBenchmark("Native CRC-32 (1K)", async () => {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "crc32" as const }))
+    );
+  }, 1));
+
+  results.push(await runBenchmark("Native CRC-32 (10K)", async () => {
+    await CppNativeEngine.batchComputeHashes(
+      Array.from({ length: 10000 }, () => ({ data: testData, algorithm: "crc32" as const }))
     );
   }, 1));
 

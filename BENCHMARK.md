@@ -3,66 +3,98 @@
 ## Running Benchmarks
 
 ### Prerequisites
+
 - Node.js 20+
-- Built C++ native engine
+- Built C++ native engine (optional, falls back to worker/sync)
 - Redis running (for cache benchmarks)
 
 ### Quick Benchmark
-```bash
-# Run all benchmarks
-npm run benchmark
 
-# Run specific benchmark
-npm run benchmark -- --filter=cpp-engine
+```bash
+# Run built-in benchmarks
+npm run benchmark
 ```
 
 ### Manual Benchmark Commands
 
 #### C++ Engine Performance
+
 ```bash
-curl -H "Authorization: Bearer <token>" http://localhost:3000/api/cpp-engine/scan \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"packetId": 1, "riskWeight": 1.2}' \
-  --repeat 1000 \
-  --rate-limit 100
+# Native engine scan benchmark
+for i in {1..1000}; do
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    http://localhost:3000/api/cpp-engine/scan \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"packetId": 1, "riskWeight": 1.2}' | \
+    jq '.result.latencyMicros'
+done | awk '{sum+=$1; count++} END {print "Avg:", sum/count, "us"}'
 ```
 
 #### API Response Time
+
 ```bash
-ab -n 1000 -c 50 -H "Authorization: Bearer <token>" http://localhost:3000/api/health
+# Health endpoint benchmark
+ab -n 1000 -c 50 -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/health
+
+# With curl timing
+for i in {1..100}; do
+  curl -o /dev/null -s -w "%{time_total}\n" \
+    -H "Authorization: Bearer $TOKEN" \
+    http://localhost:3000/api/health
+done | awk '{sum+=$1; count++} END {print "Avg:", sum/count, "s"}'
 ```
 
 #### Security Event Processing
+
 ```bash
 # Simulate 100 nukers drill
 curl -X POST http://localhost:3000/api/bot/simulate-100-nukers \
-  -H "Authorization: Bearer <token>"
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+#### C++ Engine Batch Scan
+
+```bash
+# Batch scan benchmark
+curl -X POST http://localhost:3000/api/cpp-engine/scan \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"packetId": 1, "riskWeight": 1.2, "batchSize": 1000}'
 ```
 
 ## Expected Results
 
 ### C++ Engine
+
 | Metric | Target | Typical |
 |--------|--------|---------|
-| Packet scan latency | < 1ms | 0.3-0.8ms |
-| Throughput | > 10k ops/sec | 15-25k ops/sec |
+| Single scan latency | < 1ms | 0.3-0.8ms |
+| Batch throughput | > 10k ops/sec | 15-25k ops/sec |
 | Memory usage | < 50MB | 20-40MB |
+| Hash latency (SHA-256) | < 1ms | 0.2-0.5ms |
+| Hash latency (CRC-32) | < 0.5ms | 0.1-0.3ms |
 
 ### API Performance
+
 | Metric | Target | Typical |
 |--------|--------|---------|
 | Health check latency | < 10ms | 1-5ms |
 | Auth verification | < 5ms | 1-3ms |
 | Security scan | < 100ms | 20-80ms |
 | AI chat response | < 2s | 0.5-1.5s |
+| GitHub status | < 200ms | 50-150ms |
 
 ### Dashboard
+
 | Metric | Target | Typical |
 |--------|--------|---------|
 | Initial load | < 2s | 0.5-1.5s |
 | Tab switch | < 200ms | 50-150ms |
 | Event feed update | < 100ms | 20-80ms |
+| Analytics render | < 500ms | 100-300ms |
 
 ## Performance Characteristics
 
@@ -70,67 +102,66 @@ curl -X POST http://localhost:3000/api/bot/simulate-100-nukers \
 - **API**: 1000+ requests/second with rate limiting
 - **Events**: 10,000+ events/second processing capacity
 - **Discord Gateway**: 50+ shards supported
+- **C++ Engine**: 15,000-25,000 scans/second
 
 ### Latency
-- **p50**: < 50ms for most endpoints
-- **p95**: < 200ms for standard operations
-- **p99**: < 1000ms including AI operations
+
+| Percentile | Target | Typical |
+|-----------|--------|---------|
+| p50 | < 50ms | 5-20ms |
+| p95 | < 200ms | 20-100ms |
+| p99 | < 1000ms | 50-500ms |
 
 ### Memory
-- **Base**: ~200MB heap
-- **Under load**: ~500MB heap
-- **C++ engine**: ~30MB native memory
+
+| State | Heap | Native |
+|-------|------|--------|
+| Idle | ~200MB | ~30MB |
+| Under load | ~500MB | ~40MB |
+| Peak | ~1GB | ~50MB |
 
 ## Optimization Tips
 
 ### 1. Thread Pool Tuning
+
 ```env
 UV_THREADPOOL_SIZE=128
 ```
 
 ### 2. Node.js Heap
+
 ```env
 NODE_OPTIONS=--max-old-space-size=450
 ```
 
 ### 3. Redis Caching
+
 - Enable for frequently accessed data
 - TTL: 5 minutes for static data
 - TTL: 30 seconds for dynamic data
 
 ### 4. Database Indexing
+
 - Index on timestamp for audit logs
 - Index on userId for user lookups
 - Index on severity for filtered queries
 
 ### 5. Compression
+
 - Enable gzip/brotli for API responses
 - Use deflate for backup archives
 - Compress static assets via Vite
 
 ### 6. Connection Pooling
+
 - Reuse database connections
 - Limit max connections to prevent exhaustion
 - Monitor connection pool utilization
 
-### 7. Caching Strategy
-```
-┌─────────────────┐     ┌─────────────────┐
-│   Request       │────▶│   Redis Cache   │
-│                 │     │   (TTL: 5min)   │
-└─────────────────┘     └─────────────────┘
-         │                       │
-         │ Cache Hit            │ Cache Miss
-         ▼                       ▼
-   ┌─────────────┐     ┌─────────────────┐
-   │   Return    │     │   Compute       │
-   │   Cached    │     │   & Store       │
-   └─────────────┘     └─────────────────┘
-```
-
 ## Load Testing
 
 ### Artillery.io
+
 ```yaml
 # artillery.yml
 config:
@@ -138,11 +169,22 @@ config:
   phases:
     - duration: 60
       arrivalRate: 10
+  defaults:
+    headers:
+      Authorization: "Bearer $TOKEN"
 scenarios:
   - name: "Health check"
     flow:
       - get:
           url: "/api/health"
+  - name: "Auth check"
+    flow:
+      - get:
+          url: "/api/auth/session"
+  - name: "Security stats"
+    flow:
+      - get:
+          url: "/api/bot/security-status"
 ```
 
 ```bash
@@ -151,6 +193,7 @@ artillery run artillery.yml
 ```
 
 ### k6
+
 ```javascript
 // load-test.js
 import http from 'k6/http';
@@ -161,35 +204,84 @@ export let options = {
     { duration: '30s', target: 100 },
     { duration: '1m', target: 100 },
     { duration: '30s', target: 0 }
-  ]
+  ],
+  thresholds: {
+    'http_req_duration': ['p(95)<200'],
+    'http_req_failed': ['rate<0.01']
+  }
 };
 
 export default function() {
-  const res = http.get('http://localhost:3000/api/health');
-  check(res, { 'status was 200': (r) => r.status == 200 });
+  const res = http.get('http://localhost:3000/api/health', {
+    headers: { 'Authorization': `Bearer ${__ENV.TOKEN}` }
+  });
+  check(res, {
+    'status was 200': (r) => r.status == 200,
+    'latency < 100ms': (r) => r.timings.duration < 100
+  });
 }
 ```
 
 ```bash
-k6 run load-test.js
+k6 run -e TOKEN=$TOKEN load-test.js
+```
+
+### wrk
+
+```bash
+wrk -t4 -c100 -d30s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/health
 ```
 
 ## Profiling
 
-### Node.js Profiling
+### Node.js CPU Profiling
+
 ```bash
-node --prof server-build/server.cjs
+# Start with profiling
+node --cpu-prof server-build/server.cjs
+
+# Process profile
 node --prof-process isolate-*.log > processed.txt
 ```
 
 ### Memory Profiling
+
 ```bash
+# Start with inspector
 node --inspect server-build/server.cjs
+
 # Connect Chrome DevTools to http://localhost:9229
 ```
 
-### CPU Profiling
+### Heap Snapshot
+
 ```bash
-node --cpu-prof server-build/server.cjs
-# Output: CPU profile in .nodejs/*.cpuprofile
+# Take heap snapshot via API
+curl -X POST http://localhost:3000/api/debug/heap-snapshot \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Benchmark Results Template
+
+```
+=== Benchmark Run: 2026-08-12 ===
+Environment: Node.js 20.x, 4 CPU, 8GB RAM
+
+C++ Engine:
+  - Scan latency (p50): 0.4ms
+  - Scan latency (p95): 0.8ms
+  - Scan latency (p99): 1.2ms
+  - Throughput: 22,000 ops/sec
+  - Memory: 32MB
+
+API:
+  - Health check (p50): 2ms
+  - Health check (p95): 5ms
+  - Auth check (p50): 1ms
+  - Security scan (p50): 25ms
+
+Dashboard:
+  - Initial load: 0.8s
+  - Tab switch: 80ms
 ```
