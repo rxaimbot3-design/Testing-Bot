@@ -3437,13 +3437,14 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           const VoiceService = { playAudioInGuild, stopAudioInGuild, pauseAudioInGuild, resumeAudioInGuild };
 
            if (commandName === "play") {
-              let query = interaction.options.getString("query") || "phonk";
-              if (query.length > 250) query = query.slice(0, 250);
-              if (musicState.queue.length >= 100) {
-                await interaction.reply({ content: "❌ **Queue Full:** Maximum queue limit of 100 tracks reached.", ephemeral: true });
-                return;
-              }
-              const { songUrl, title, artist, durationSeconds, thumbnail } = await getAudioStreamDetails(query);
+               let query = interaction.options.getString("query") || "phonk";
+               if (query.length > 250) query = query.slice(0, 250);
+               if (musicState.queue.length >= 100) {
+                 await interaction.reply({ content: "❌ **Queue Full:** Maximum queue limit of 100 tracks reached.", ephemeral: true });
+                 return;
+               }
+               const isYouTube = /youtube\.com|youtu\.be/.test(query.toLowerCase());
+               const { songUrl, title, artist, durationSeconds, thumbnail } = await getAudioStreamDetails(query);
               const track = {
                  id: `track_${Date.now()}`,
                  title, artist, durationSeconds: durationSeconds || 210, url: songUrl, requestedBy: interaction.user.username,
