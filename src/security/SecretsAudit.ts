@@ -54,6 +54,26 @@ export function auditSecrets(rootDir: string = process.cwd()): { clean: boolean;
   const findings: SecretFinding[] = [];
   const ignoreDirs = new Set(["node_modules", ".git", "dist", "build", "server-build", "coverage"]);
   const ignoreFiles = new Set([".env", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"]);
+  const skipExtensions = new Set([".md", ".map"]);
+  const skipPrefixes = ["tests/", "test/", "__tests__/"];
+
+  function isGitignored(filePath: string): boolean {
+    try {
+      const { execSync } = require("child_process");
+      const result = execSync(`git check-ignore -q "${filePath}"`, { cwd: rootDir, encoding: "utf8" });
+      return result.code === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  function shouldSkip(filePath: string): boolean {
+    const relative = path.relative(rootDir, filePath);
+    if (skipPrefixes.some(p => relative.startsWith(p))) return true;
+    if (skipExtensions.has(path.extname(relative))) return true;
+    if (path.basename(relative) === ".env.example") return true;
+    return false;
+  }
 
   function walk(dir: string): void {
     if (!fs.existsSync(dir)) return;
@@ -62,11 +82,11 @@ export function auditSecrets(rootDir: string = process.cwd()): { clean: boolean;
       const fullPath = path.join(dir, entry.name);
       if (ignoreDirs.has(entry.name)) continue;
       if (ignoreFiles.has(entry.name)) continue;
-      if (entry.name.startsWith(".") && entry.name !== ".env.example") continue;
-
+      if (shouldSkip(fullPath)) continue;
       if (entry.isDirectory()) {
         walk(fullPath);
       } else if (entry.isFile()) {
+        if (isGitignored(fullPath)) continue;
         const fileFindings = scanFile(fullPath);
         findings.push(...fileFindings);
       }
