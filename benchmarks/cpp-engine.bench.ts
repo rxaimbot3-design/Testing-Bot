@@ -2,12 +2,16 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createHash } from "crypto";
+import { CppNativeEngine } from "../src/CppEngine.js";
 
 const __filename = typeof import.meta !== "undefined" && import.meta.url
   ? fileURLToPath(import.meta.url)
   : process.argv[1] || ".";
 const __dirname = path.dirname(__filename);
 
+// ================================================================
+//  Benchmark result schema
+// ================================================================
 interface BenchmarkResult {
   test: string;
   throughputPerSec: number;
@@ -22,6 +26,9 @@ interface BenchmarkResult {
   durationMs: number;
 }
 
+// ================================================================
+//  Statistical helpers
+// ================================================================
 function percentile(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
   const sorted = [...arr].sort((a, b) => a - b);
@@ -34,7 +41,14 @@ function average(arr: number[]): number {
   return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
-async function runBenchmark(name: string, fn: () => Promise<void> | void, events: number): Promise<BenchmarkResult> {
+// ================================================================
+//  Core benchmark runner
+// ================================================================
+async function runBenchmark(
+  name: string,
+  fn: () => Promise<void> | void,
+  events: number
+): Promise<BenchmarkResult> {
   const memBefore = process.memoryUsage();
   const cpuBefore = process.cpuUsage();
   const start = Date.now();
@@ -58,7 +72,9 @@ async function runBenchmark(name: string, fn: () => Promise<void> | void, events
   const cpuUserMs = cpuAfter.user / 1000;
   const cpuSystemMs = cpuAfter.system / 1000;
   const totalCpuMs = cpuUserMs + cpuSystemMs;
-  const cpuAvgPct = durationMs > 0 ? (totalCpuMs / (durationMs * os.cpus().length)) * 100 : 0;
+  const cpuAvgPct = durationMs > 0
+    ? (totalCpuMs / (durationMs * os.cpus().length)) * 100
+    : 0;
 
   return {
     test: name,
@@ -71,13 +87,18 @@ async function runBenchmark(name: string, fn: () => Promise<void> | void, events
     cpuAvgPct: Math.round(cpuAvgPct * 100) / 100,
     cpuMaxPct: Math.round(cpuAvgPct * 100) / 100,
     totalEvents,
-    durationMs
+    durationMs,
   };
 }
 
+// ================================================================
+//  Output formatting
+// ================================================================
 function printTable(results: BenchmarkResult[]) {
   console.log("\n" + "=".repeat(120));
-  console.log(`${"Test".padEnd(28)} | Throughput/s | p50 us | p95 us | p99 us | Avg us | Mem MB | CPU % | Events | Duration ms`);
+  console.log(
+    `${"Test".padEnd(28)} | Throughput/s | p50 us | p95 us | p99 us | Avg us | Mem MB | CPU % | Events | Duration ms`
+  );
   console.log("-".repeat(120));
   for (const r of results) {
     console.log(
@@ -87,36 +108,89 @@ function printTable(results: BenchmarkResult[]) {
   console.log("=".repeat(120) + "\n");
 }
 
+// ================================================================
+//  Main benchmark suite
+// ================================================================
 async function main() {
-  console.log("🔬 [BENCHMARK] Starting C++ Engine Benchmark Suite\n");
+  console.log("🔬 [BENCHMARK] C++ Native Engine + Node.js Crypto Benchmark Suite\n");
+
+  // Initialize native engine (falls back to sync if native is unavailable)
+  await CppNativeEngine.initEngine();
+  const engineMode = (CppNativeEngine as any).engineMode || "unknown";
+  console.log(`⚡ [BENCHMARK] Engine mode: ${engineMode}\n`);
 
   const results: BenchmarkResult[] = [];
+  const cpuCount = os.cpus().length;
+  const testData = "benchmark_payload_" + "x".repeat(256);
 
+  // ----------------------------------------------------------
+  // 1. Node.js Crypto baselines (OpenSSL-backed)
+  // ----------------------------------------------------------
   const hash256 = (data: string) => createHash("sha256").update(data).digest("hex");
   const hash512 = (data: string) => createHash("sha512").update(data).digest("hex");
 
-  const testData = "benchmark_payload_" + "x".repeat(256);
+  results.push(await runBenchmark("Node SHA-256 (1K)", async () => { hash256(testData); }, 1000));
+  results.push(await runBenchmark("Node SHA-256 (10K)", async () => { hash256(testData); }, 10000));
+  results.push(await runBenchmark("Node SHA-512 (1K)", async () => { hash512(testData); }, 1000));
+  results.push(await runBenchmark("Node SHA-512 (10K)", async () => { hash512(testData); }, 10000));
 
-  const hash256Batch = async (n: number) => {
-    for (let i = 0; i < n; i++) hash256(testData + i);
-  };
+  // ----------------------------------------------------------
+  // 2. Native C++ scanPacket
+  // ----------------------------------------------------------
+  results.push(await runBenchmark("Native scanPacket (1K)", async () => {
+    CppNativeEngine.scanSecurityPacket(Math.floor(Math.random() * 10000), 1.2);
+  }, 1000));
 
-  const hash512Batch = async (n: number) => {
-    for (let i = 0; i < n; i++) hash512(testData + i);
-  };
+  results.push(await runBenchmark("Native scanPacket (10K)", async () => {
+    CppNativeEngine.scanSecurityPacket(Math.floor(Math.random() * 10000), 1.2);
+  }, 10000));
 
-  results.push(await runBenchmark("SHA-256 (1K ops)", async () => { hash256(testData); }, 1000));
-  results.push(await runBenchmark("SHA-256 (10K ops)", async () => { hash256(testData); }, 10000));
-  results.push(await runBenchmark("SHA-512 (1K ops)", async () => { hash512(testData); }, 1000));
-  results.push(await runBenchmark("SHA-512 (10K ops)", async () => { hash512(testData); }, 10000));
+  // ----------------------------------------------------------
+  // 3. Native C++ scanBatch
+  // ----------------------------------------------------------
+  const buildBatch = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ packetId: i, riskWeight: Math.random() * 5 }));
 
-  const cpuCount = os.cpus().length;
+  results.push(await runBenchmark("Native scanBatch (1K)", async () => {
+    await CppNativeEngine.batchScanPackets(buildBatch(1000));
+  }, 1));  // 1 iteration of 1K batch
+
+  results.push(await runBenchmark("Native scanBatch (10K)", async () => {
+    await CppNativeEngine.batchScanPackets(buildBatch(10000));
+  }, 1));
+
+  // ----------------------------------------------------------
+  // 4. Native C++ computeHash (sha256, sha512, crc32)
+  // ----------------------------------------------------------
+  results.push(await runBenchmark("Native SHA-256 (1K)", async () => {
+    await CppNativeEngine.batchComputeHashes(
+      Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "sha256" as const }))
+    );
+  }, 1));
+
+  results.push(await runBenchmark("Native SHA-512 (1K)", async () => {
+    await CppNativeEngine.batchComputeHashes(
+      Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "sha512" as const }))
+    );
+  }, 1));
+
+  results.push(await runBenchmark("Native CRC-32 (1K)", async () => {
+    await CppNativeEngine.batchComputeHashes(
+      Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "crc32" as const }))
+    );
+  }, 1));
+
+  // ----------------------------------------------------------
+  // 5. Burst attack simulation
+  // ----------------------------------------------------------
   const burstEvents = 5000;
   const burstStart = Date.now();
-  await hash256Batch(burstEvents);
+  for (let i = 0; i < burstEvents; i++) {
+    CppNativeEngine.scanSecurityPacket(i, Math.random() * 10);
+  }
   const burstDurationMs = Date.now() - burstStart;
   results.push({
-    test: "Burst Attack Detection",
+    test: "Burst Attack (5K scanPacket)",
     throughputPerSec: Math.round(burstEvents / (burstDurationMs / 1000)),
     p50Micros: 0,
     p95Micros: 0,
@@ -126,34 +200,61 @@ async function main() {
     cpuAvgPct: 0,
     cpuMaxPct: 0,
     totalEvents: burstEvents,
-    durationMs: burstDurationMs
+    durationMs: burstDurationMs,
   });
 
-  const batchSizes = [1000, 10000, 100000];
-  for (const size of batchSizes) {
-    results.push(await runBenchmark(`Batch Scan (${size} events)`, async () => {
-      const promises: Promise<void>[] = [];
-      const chunk = 100;
-      for (let i = 0; i < size; i += chunk) {
-        promises.push(hash256Batch(Math.min(chunk, size - i)));
-      }
-      await Promise.all(promises);
-    }, size));
-  }
+  // ----------------------------------------------------------
+  // 6. Metrics snapshot
+  // ----------------------------------------------------------
+  const metrics = CppNativeEngine.getMetrics();
+  console.log("\n📊 [BENCHMARK] Live Engine Metrics");
+  console.log(JSON.stringify(metrics, null, 2));
 
+  // ----------------------------------------------------------
+  // Print results table
+  // ----------------------------------------------------------
   printTable(results);
 
-  const md = `# Benchmark Results\n\nGenerated: ${new Date().toISOString()}\n\nEnvironment:\n- Node.js: ${process.version}\n- CPUs: ${cpuCount} (${os.arch()})\n- Platform: ${os.platform()}\n\n## Summary\n\n| Test | Throughput/s | p50 (µs) | p95 (µs) | p99 (µs) | Avg (µs) | Peak Mem (MB) | CPU % | Events | Duration (ms) |\n|------|-------------|----------|----------|----------|----------|---------------|-------|--------|---------------|\n`;
+  // ----------------------------------------------------------
+  // Generate Markdown report
+  // ----------------------------------------------------------
+  const md = `# Benchmark Results
+
+Generated: ${new Date().toISOString()}
+
+Environment:
+- Node.js: ${process.version}
+- CPUs: ${cpuCount} (${os.arch()})
+- Platform: ${os.platform()}
+- Engine Mode: ${engineMode}
+
+## Summary
+
+| Test | Throughput/s | p50 (us) | p95 (us) | p99 (us) | Avg (us) | Peak Mem (MB) | CPU % | Events | Duration (ms) |
+|------|-------------|----------|----------|----------|----------|---------------|-------|--------|---------------|
+`;
   let table = md;
   for (const r of results) {
     table += `| ${r.test} | ${r.throughputPerSec} | ${r.p50Micros} | ${r.p95Micros} | ${r.p99Micros} | ${r.avgMicros} | ${r.memoryPeakMB} | ${r.cpuAvgPct} | ${r.totalEvents} | ${r.durationMs} |\n`;
   }
-  table += `\n## Notes\n\n- SHA-256/SHA-512 computed via Node.js crypto (C++ OpenSSL backend).\n- Batch scans are parallelized via Promise.all with chunking.\n- CPU usage is per-core average.\n- Memory is V8 heap used.\n`;
+  table += `
+## Notes
 
-  fs.writeFileSync(path.join(process.cwd(), "BENCHMARK_RESULTS.md"), table);
-  console.log("📄 [BENCHMARK] Results saved to BENCHMARK_RESULTS.md\n");
+- Native benchmarks exercise the compiled C++ N-API addon (security_engine.node).
+- Node.js crypto benchmarks use the built-in OpenSSL bindings.
+- scanBatch results are measured per full batch invocation.
+- CPU usage is per-core average across all logical CPUs.
+- Memory is V8 heap used; native arena memory is tracked via engine metrics.
+`;
+
+  const outPath = path.join(process.cwd(), "BENCHMARK_RESULTS.md");
+  fs.writeFileSync(outPath, table);
+  console.log(`📄 [BENCHMARK] Results saved to ${outPath}\n`);
 }
 
+// ================================================================
+//  Entry point
+// ================================================================
 import fs from "fs";
 main().catch((e) => {
   console.error("Benchmark failed:", e);
