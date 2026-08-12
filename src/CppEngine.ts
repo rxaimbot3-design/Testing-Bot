@@ -37,11 +37,42 @@ export interface CppEngineMetrics {
 interface ScanRequest {
   packetId: number;
   riskWeight: number;
+  userId?: number;
+  guildId?: number;
+  channelCount?: number;
+  roleCount?: number;
+  banCount?: number;
+  kickCount?: number;
+  webhookCount?: number;
+  botCount?: number;
+  permsAdded?: number;
+  permsRemoved?: number;
+  eventCount1s?: number;
+  eventCount10s?: number;
+  eventType?: number;
 }
 
 interface HashRequest {
   data: string;
   algorithm: "sha256" | "sha512" | "crc32";
+}
+
+interface ScanEvent {
+  eventType: number;
+  userId: number;
+  guildId: number;
+  channelCount: number;
+  roleCount: number;
+  banCount: number;
+  kickCount: number;
+  webhookCount: number;
+  botCount: number;
+  permsAdded: number;
+  permsRemoved: number;
+  eventCount1s: number;
+  eventCount10s: number;
+  timestamp: number;
+  riskWeight?: number;
 }
 
 type WorkerRequestType = "scan_batch" | "compute_hashes" | "get_metrics" | "reset_metrics" | "shutdown";
@@ -95,6 +126,26 @@ function tryLoadNativeModule(): any {
   return null;
 }
 
+function buildScanEvent(request: Partial<ScanRequest> = {}): ScanEvent {
+  return {
+    eventType: request.eventType ?? 0,
+    userId: Number.isFinite(request.userId) ? request.userId! : 0,
+    guildId: Number.isFinite(request.guildId) ? request.guildId! : 0,
+    channelCount: Number.isFinite(request.channelCount) ? request.channelCount! : 0,
+    roleCount: Number.isFinite(request.roleCount) ? request.roleCount! : 0,
+    banCount: Number.isFinite(request.banCount) ? request.banCount! : 0,
+    kickCount: Number.isFinite(request.kickCount) ? request.kickCount! : 0,
+    webhookCount: Number.isFinite(request.webhookCount) ? request.webhookCount! : 0,
+    botCount: Number.isFinite(request.botCount) ? request.botCount! : 0,
+    permsAdded: Number.isFinite(request.permsAdded) ? request.permsAdded! : 0,
+    permsRemoved: Number.isFinite(request.permsRemoved) ? request.permsRemoved! : 0,
+    eventCount1s: Number.isFinite(request.eventCount1s) ? request.eventCount1s! : 0,
+    eventCount10s: Number.isFinite(request.eventCount10s) ? request.eventCount10s! : 0,
+    timestamp: Date.now(),
+    riskWeight: Number.isFinite(request.riskWeight) ? request.riskWeight! : undefined
+  };
+}
+
 // ========== Worker Thread Layer ==========
 class WorkerEngine {
   private worker: Worker | null = null;
@@ -104,6 +155,10 @@ class WorkerEngine {
   private metrics: CppEngineMetrics;
   private fallbackCounter = 0;
   private fallbackBuffer: { view32: Uint32Array } | null = null;
+  private restartAttempts = 0;
+  private maxRestartAttempts = 5;
+  private restartBackoffMs = 1000;
+  private restartTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.metrics = {
@@ -129,6 +184,23 @@ class WorkerEngine {
     }
   }
 
+  private scheduleRestart() {
+    if (this.restartAttempts >= this.maxRestartAttempts) {
+      console.warn("⚠️ [ENGINE WORKER] Max restart attempts reached. Falling back to sync engine.");
+      return;
+    }
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.restartTimer = setTimeout(() => {
+      this.restartAttempts++;
+      console.log(`🔄 [ENGINE WORKER] Restarting worker (attempt ${this.restartAttempts}/${this.maxRestartAttempts})...`);
+      this.initialize().then(() => {
+        console.log("✅ [ENGINE WORKER] Worker restarted successfully.");
+      }).catch((err) => {
+        console.warn("⚠️ [ENGINE WORKER] Restart failed:", err.message);
+      });
+    }, this.restartBackoffMs * Math.pow(2, this.restartAttempts));
+  }
+
   async initialize() {
     if (this.workerReady) return;
 
@@ -148,6 +220,7 @@ class WorkerEngine {
         console.warn("⚠️ [ENGINE WORKER] Worker error:", err.message);
         this.workerReady = false;
         this.worker = null;
+        this.scheduleRestart();
       });
 
       this.worker.on("exit", (code) => {
@@ -155,6 +228,7 @@ class WorkerEngine {
           console.warn(`⚠️ [ENGINE WORKER] Worker exited with code ${code}`);
           this.workerReady = false;
           this.worker = null;
+          this.scheduleRestart();
         }
       });
 
@@ -275,6 +349,10 @@ class WorkerEngine {
   }
 
   async shutdown() {
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
     if (this.workerReady && this.worker) {
       try {
         await this.sendRequest("shutdown", undefined, 2000);
@@ -293,6 +371,12 @@ class WorkerEngine {
     this.pendingRequests.clear();
     this.requestId = 0;
     this.fallbackCounter = 0;
+    this.restartAttempts = 0;
+    this.restartBackoffMs = 1000;
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
   }
 
   private fallbackScanBatch(requests: ScanRequest[]): Array<{ passed: boolean; latencyMicros: number; score: number }> {
@@ -321,7 +405,8 @@ class WorkerEngine {
   private fallbackComputeHashes(requests: HashRequest[]): Array<{ hash: string; latencyMicros: number }> {
     return requests.map((req) => {
       const startTime = process.hrtime.bigint();
-      const buf = Buffer.from(req.data, "utf8");
+      const dataStr = typeof req.data === "string" ? req.data : String(req.data ?? "");
+      const buf = Buffer.from(dataStr, "utf8");
       let hash: string;
       switch (req.algorithm) {
         case "sha256":
@@ -480,14 +565,20 @@ export class CppNativeEngine {
     const safeRiskWeight = Number.isFinite(riskWeight) ? Math.max(0, Math.min(1000, riskWeight)) : 0;
     if (this.engineMode === "native" && nativeInstance) {
       try {
-        const result = nativeInstance.scanPacket(safePacketId, safeRiskWeight);
+        const event = buildScanEvent({
+          eventType: safeRiskWeight > 500 ? 1 : 0,
+          riskWeight: safeRiskWeight
+        });
+        const result = nativeInstance.scanPacket(safePacketId, event);
         return {
           passed: Boolean(result.passed),
           latencyMicros: typeof result.latencyMicros === 'number' ? result.latencyMicros : Number(result.latencyMicros),
           score: typeof result.score === 'number' ? result.score : Number(result.score)
         };
-      } catch {
-        // fallback to sync
+      } catch (err) {
+        console.warn("⚠️ [ENGINE] Native module scan failed, falling back to sync:", (err as Error).message);
+        this.engineMode = "sync";
+        nativeAvailable = false;
       }
     }
     return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
@@ -496,8 +587,8 @@ export class CppNativeEngine {
   static async batchScanPackets(requests: ScanRequest[]): Promise<Array<{ passed: boolean; latencyMicros: number; score: number }>> {
     if (this.engineMode === "native" && nativeInstance) {
       try {
-        const jsArray = requests.map(r => ({ packetId: r.packetId, riskWeight: r.riskWeight }));
-        const result = nativeInstance.scanBatch(jsArray);
+        const payload = requests.map(r => ({ packetId: r.packetId, event: buildScanEvent(r) }));
+        const result = nativeInstance.scanBatch(payload);
         const arr: Array<{ passed: boolean; latencyMicros: number; score: number }> = [];
         for (let i = 0; i < result.length; i++) {
           const item = result[i];

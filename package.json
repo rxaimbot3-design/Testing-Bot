@@ -23,6 +23,10 @@
     "test:load": "vitest run tests/load.test.ts",
     "test:stress": "vitest run tests/stress.test.ts",
     "test:regression": "vitest run tests/regression.test.ts",
+    "test:cpp": "vitest run tests/cpp-engine.test.ts",
+    "test:security": "vitest run tests/security.test.ts tests/pipeline.test.ts",
+    "benchmark": "vitest run tests/load.test.ts tests/stress.test.ts",
+    "docs:build": "node scripts/build-docs.js",
     "test:all": "vitest run",
     "typecheck": "tsc --noEmit",
     "security:scan": "npm audit --audit-level=high"

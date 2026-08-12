@@ -54,6 +54,7 @@ import ErrorMonitoringTab from './components/ErrorMonitoringTab';
 import BackupStatusTab from './components/BackupStatusTab';
 import TrustSystemTab from './components/TrustSystemTab';
 import HealthCheck from './components/HealthCheck';
+import SecurityAlertsPanel from './components/SecurityAlertsPanel';
 import { parseMusicIntent } from './services/musicIntentService';
 import { apiFetch, checkSession, loginWithAdminKey, logoutAdmin, getAdminToken, loginWithDiscordToken } from './services/apiClient';
 
@@ -81,7 +82,8 @@ type DashboardTab =
   | 'audit-logs'
   | 'error-monitoring'
   | 'backup-status'
-  | 'trust-system';
+  | 'trust-system'
+  | 'security-alerts';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
@@ -370,6 +372,7 @@ export default function App() {
     { id: 'audit-logs', icon: FileText, label: 'Audit Logs', category: 'COMPLIANCE' },
     { id: 'error-monitoring', icon: Bug, label: 'Error Monitoring', category: 'MONITORING' },
     { id: 'backup-status', icon: HardDrive, label: 'Backup Status', category: 'OPERATIONS' },
+    { id: 'security-alerts', icon: ShieldAlert, label: 'Security Alerts', category: 'MONITORING' },
     { id: 'trust-system', icon: Users, label: 'Trust System', category: 'SECURITY' },
     { id: 'embeds', icon: Palette, label: 'Visual Embed Builder', category: 'BUILDER' },
     { id: 'tickets', icon: Ticket, label: 'Tickets & User Control', category: 'MANAGEMENT' },
@@ -721,6 +724,10 @@ export default function App() {
 
               {activeTab === 'backup-status' && (
                 <BackupStatusTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'security-alerts' && (
+                <SecurityAlertsPanel onAddLog={handleAddLog} />
               )}
 
               {activeTab === 'trust-system' && (

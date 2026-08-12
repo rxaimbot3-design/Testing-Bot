@@ -4,6 +4,7 @@ import fs from "fs";
 import crypto from "crypto";
 import path from "path";
 import { Buffer } from "buffer";
+import { TtlMap, LruMap } from "./security/MapManager.js";
 
 const AI_QUOTA_WARNING = "AI Quota limit reached in SecurityFeatures.";
 
@@ -299,7 +300,7 @@ export class AntiPhishing {
 
 // 9. Rate Limit Tracker
 export class RateLimiter {
-  private static userActions = new Map<string, { count: number; timestamp: number }>();
+  private static userActions = new TtlMap<string, { count: number; timestamp: number }>({ ttlMs: 10000, maxEntries: 10000, autoCleanupMs: 30000 });
 
   static check(userId: string): boolean {
     const now = Date.now();
@@ -323,7 +324,7 @@ export class RateLimiter {
 // 13. Canary Token Trap
 export class CanaryToken {
   private static processFallbackSecret = crypto.randomBytes(32).toString("hex");
-  private static consumedTokens = new Set<string>();
+  private static consumedTokens = new LruMap<string, boolean>(10000);
 
   // If someone steals your .env and tries to login with the CANARY_TOKEN, 
   // you can set up a tracking webhook on a separate server to know you were breached.
@@ -384,11 +385,7 @@ export class CanaryToken {
         return { valid: false };
       }
 
-      this.consumedTokens.add(sig);
-      if (this.consumedTokens.size > 10000) {
-        const arr = Array.from(this.consumedTokens);
-        this.consumedTokens = new Set(arr.slice(5000));
-      }
+      this.consumedTokens.set(sig, true);
 
       return { valid: true, guildId, trapName, userId: tokenUserId };
     } catch {
@@ -426,10 +423,10 @@ export class NukeDefense {
 
 // 15. Global Threat Intelligence (Cross-Server Ban)
 export class GlobalIntelligence {
-  static knownThreats = new Set<string>();
+  private static knownThreats = new LruMap<string, boolean>(10000);
 
   static flagUser(userId: string) {
-    this.knownThreats.add(userId);
+    this.knownThreats.set(userId, true);
     console.log(`[GLOBAL INTEL] User ${userId} flagged as a global threat.`);
   }
 
@@ -443,7 +440,7 @@ export class GlobalIntelligence {
 
 // 16. Webhook Guard (Strict Server Owner ONLY Policy Enforced)
 export class WebhookGuard {
-  static whitelist = new Set<string>();
+  private static whitelist = new LruMap<string, boolean>(5000);
   
   static async verify(guild: Guild) {
     const webhooks = await guild.fetchWebhooks().catch(() => null);
@@ -486,20 +483,13 @@ export class WebhookGuard {
 // 17. Auto-Heal System
 // 18. AI Deep Scan (Gemini Integration)
 export class AIDeepScan {
-  private static lastScanTimes = new Map<string, number>();
+  private static lastScanTimes = new TtlMap<string, number>({ ttlMs: 5 * 60 * 1000, maxEntries: 5000, autoCleanupMs: 60000 });
 
   static async analyzeMessage(messageContent: string, userId: string = "global", channelId: string = "global"): Promise<number> {
     // 0 = Safe, 100 = High Threat (Social Engineering, Raid Planning)
     if (!process.env.GEMINI_API_KEY || !messageContent) return 0; // Skip if no key
 
     const now = Date.now();
-
-    // Prune stale entries older than 5 minutes to prevent memory leak
-    for (const [key, timestamp] of this.lastScanTimes.entries()) {
-      if (now - timestamp > 300000) {
-        this.lastScanTimes.delete(key);
-      }
-    }
 
     const userKey = `u:${userId}`;
     const channelKey = `c:${channelId}`;
@@ -582,22 +572,15 @@ export class Quarantine {
 
 // 20. Temporal Raid Lock
 export class SentimentTracker {
-  static serverScores = new Map<string, number>();
-  private static lastScanTimes = new Map<string, number>();
-  private static lockedChannels = new Map<string, NodeJS.Timeout>();
+  static serverScores = new TtlMap<string, number>({ ttlMs: 30 * 60 * 1000, maxEntries: 1000, autoCleanupMs: 120000 });
+  private static lastScanTimes = new TtlMap<string, number>({ ttlMs: 5 * 60 * 1000, maxEntries: 5000, autoCleanupMs: 60000 });
+  private static lockedChannels = new TtlMap<string, NodeJS.Timeout>({ ttlMs: 10 * 60 * 1000, maxEntries: 500, autoCleanupMs: 60000 });
 
   static async analyzeMessage(message: Message, alertCallback: (msg: string) => void) {
     if (message.author.bot || !message.guild || !message.content) return;
 
     // Cooldown checks to prevent quota exhaustion
     const now = Date.now();
-
-    // Prune stale entries older than 5 minutes to prevent memory leak
-    for (const [key, timestamp] of this.lastScanTimes.entries()) {
-      if (now - timestamp > 300000) {
-        this.lastScanTimes.delete(key);
-      }
-    }
 
     const userKey = `u:${message.author.id}`;
     const channelKey = `c:${message.channel.id}`;
@@ -725,7 +708,7 @@ Message: "${message.content}"`;
 
 // 21. AI Behavior Scoring (Per User Risk Score)
 export class BehaviorScoring {
-  private static userRiskScores = new Map<string, { score: number; reasons: string[]; lastUpdated: number }>();
+  private static userRiskScores = new TtlMap<string, { score: number; reasons: string[]; lastUpdated: number }>({ ttlMs: 60 * 60 * 1000, maxEntries: 5000, autoCleanupMs: 60000 });
 
   static getRisk(userId: string) {
     return this.userRiskScores.get(userId) || { score: 10, reasons: ["New/Normal User"], lastUpdated: Date.now() };
@@ -744,6 +727,9 @@ export class BehaviorScoring {
     const newScore = Math.min(100, Math.max(0, current.score + points));
     const reasons = [reason, ...current.reasons.filter((r: any) => r !== reason)].slice(0, 5);
     this.userRiskScores.set(userId, { score: newScore, reasons, lastUpdated: Date.now() });
+    if (this.userRiskScores.usage > 4000) {
+      console.warn(`⚠️ [BEHAVIOR SCORE] Map size approaching limit: ${this.userRiskScores.usage}/5000`);
+    }
     console.log(`⚠️ [BEHAVIOR SCORE] User ${userId} risk updated: ${newScore}/100 (${reason})`);
     return newScore;
   }
@@ -814,7 +800,7 @@ export interface ServerSnapshotData {
 }
 
 export class ServerSnapshotRestore {
-  static snapshotStore = new Map<string, ServerSnapshotData[]>(); // guildId -> snapshots
+  static snapshotStore = new TtlMap<string, ServerSnapshotData[]>({ ttlMs: 24 * 60 * 60 * 1000, maxEntries: 100, autoCleanupMs: 300000 }); // guildId -> snapshots
 
   static async createSnapshot(guild: Guild): Promise<ServerSnapshotData> {
     if (guild.channels.cache.size === 0) {
@@ -2023,44 +2009,60 @@ export class MongoRedisEngine {
   private static redisAvailable = false;
   private static redisInitPromise: Promise<void> | null = null;
 
+  private static async retryWithBackoff<T>(operation: () => Promise<T>, maxRetries = 3, initialDelayMs = 1000): Promise<T> {
+    let delay = initialDelayMs;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (err: any) {
+        if (attempt < maxRetries) {
+          console.warn(`[MONGO_REDIS] Operation failed (attempt ${attempt}/${maxRetries}). Retrying in ${delay}ms...`, err.message);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        } else {
+          throw err;
+        }
+      }
+    }
+    throw new Error("Max retries exceeded");
+  }
+
   static async initRedis() {
     if (this.redisInitPromise) return this.redisInitPromise;
     if (this.redisClient) return Promise.resolve();
 
     this.redisInitPromise = (async () => {
       try {
-        const redisUrl = process.env.REDIS_URL || process.env.REDIS_HOST;
-        if (!redisUrl) {
-          console.log("[REDIS] No REDIS_URL configured, using in-memory fallback.");
-          return;
-        }
+        await this.retryWithBackoff(async () => {
+          const redisUrl = process.env.REDIS_URL || process.env.REDIS_HOST;
+          if (!redisUrl) {
+            console.log("[REDIS] No REDIS_URL configured, using in-memory fallback.");
+            return;
+          }
 
-        // Dynamic import to avoid hard dependency
-        let RedisClient: any;
-        try {
-          const mod = await import("redis");
-          RedisClient = mod.createClient || mod.default;
-        } catch {
-          console.log("[REDIS] redis package not installed, using in-memory fallback.");
-          return;
-        }
+          let RedisClient: any;
+          try {
+            const mod = await import("redis");
+            RedisClient = mod.createClient || mod.default;
+          } catch {
+            console.log("[REDIS] redis package not installed, using in-memory fallback.");
+            return;
+          }
 
-        this.redisClient = RedisClient({ url: redisUrl });
-        this.redisClient.on("error", (err: any) => {
-          console.warn("[REDIS] Client error:", err.message);
-          this.redisAvailable = false;
-        });
-        this.redisClient.on("connect", () => {
-          console.log("[REDIS] Connected to external Redis server.");
-          this.redisAvailable = true;
-        });
+          this.redisClient = RedisClient({ url: redisUrl });
+          this.redisClient.on("error", (err: any) => {
+            console.warn("[REDIS] Client error:", err.message);
+            this.redisAvailable = false;
+          });
+          this.redisClient.on("connect", () => {
+            console.log("[REDIS] Connected to external Redis server.");
+            this.redisAvailable = true;
+          });
 
-        await this.redisClient.connect().catch((err: any) => {
-          console.warn("[REDIS] Connection failed:", err.message);
-          this.redisClient = null;
-        });
+          await this.redisClient.connect();
+        }, 3, 1000);
       } catch (err: any) {
-        console.warn("[REDIS] Init failed:", err.message);
+        console.warn("[REDIS] Init failed after retries:", err.message);
         this.redisClient = null;
       }
     })();
@@ -2078,11 +2080,13 @@ export class MongoRedisEngine {
   static async set(key: string, val: any, ttlSec?: number) {
     if (this.redisAvailable && this.redisClient) {
       try {
-        if (ttlSec) {
-          await this.redisClient.setEx(key, ttlSec, JSON.stringify(val));
-        } else {
-          await this.redisClient.set(key, JSON.stringify(val));
-        }
+        await this.retryWithBackoff(async () => {
+          if (ttlSec) {
+            await this.redisClient.setEx(key, ttlSec, JSON.stringify(val));
+          } else {
+            await this.redisClient.set(key, JSON.stringify(val));
+          }
+        }, 3, 1000);
         return;
       } catch {
         this.redisAvailable = false;
@@ -2094,7 +2098,9 @@ export class MongoRedisEngine {
   static async get(key: string) {
     if (this.redisAvailable && this.redisClient) {
       try {
-        const raw = await this.redisClient.get(key);
+        const raw = await this.retryWithBackoff(async () => {
+          return await this.redisClient.get(key);
+        }, 3, 1000);
         if (raw) return JSON.parse(raw);
       } catch {
         this.redisAvailable = false;
@@ -2112,7 +2118,9 @@ export class MongoRedisEngine {
   static async del(key: string) {
     if (this.redisAvailable && this.redisClient) {
       try {
-        await this.redisClient.del(key);
+        await this.retryWithBackoff(async () => {
+          await this.redisClient.del(key);
+        }, 3, 1000);
         return;
       } catch {
         this.redisAvailable = false;
@@ -2134,7 +2142,12 @@ export class MongoRedisEngine {
       mongoConfigured: this.isMongoConnected,
       cachedKeysCount: this.realCacheMap.size
     };
-    fs.writeFileSync(dumpFile, JSON.stringify(dumpData, null, 2));
+
+    await this.retryWithBackoff(async () => {
+      fs.writeFileSync(dumpFile, JSON.stringify(dumpData, null, 2));
+      return Promise.resolve();
+    }, 3, 1000);
+
     const sizeMB = parseFloat((fs.statSync(dumpFile).size / (1024 * 1024)).toFixed(3));
     console.log(`[MONGODB BACKUP] Exported database snapshot to ${dumpFile} (${sizeMB} MB)`);
     return { success: true, timestamp, backupSizeMB: Math.max(0.01, sizeMB), dumpFile };
