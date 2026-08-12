@@ -55,6 +55,18 @@ export async function playAudioInGuild(guildId: string, audioUrl: string, target
         guildId: guild.id,
         adapterCreator: guild.voiceAdapterCreator,
       });
+
+      connection.on(VoiceConnectionStatus.Disconnected, () => {
+        logFunc(`🎵 Disconnected from Voice Channel '${targetChannel.name}' in ${guild.name}.`, "warning");
+        guildPlayers.delete(guild.id);
+        guildResources.delete(guild.id);
+      });
+
+      connection.on('error', (error: any) => {
+        logFunc(`❌ Voice Connection Error in ${guild.name}: ${error.message}`, "error");
+        guildPlayers.delete(guild.id);
+        guildResources.delete(guild.id);
+      });
     }
 
     let player = guildPlayers.get(guild.id);

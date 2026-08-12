@@ -2089,26 +2089,16 @@ client.on("ready", async () => {
             name: "dashboard",
             description: "🌐 Get link to Web Control Panel & Dashboard"
           },
-          {
-            name: "deploy-defense",
-            description: "🛡️ Deploy all 6 Zero Trust Anti-Nuke Security Layers",
-            default_member_permissions: "8"
-          },
-          {
-            name: "zerotrust",
-            description: "🛡️ View status of all 6 Zero Trust Defense Layers",
-            default_member_permissions: "8"
-          },
-          {
-            name: "6layers",
-            description: "⚡ Enforce all 6 Defense Layers of ASHTRON Zero Trust Engine",
-            default_member_permissions: "8"
-          },
-          {
-            name: "setup-verify",
-            description: "✅ Deploy #verify channel with interactive button",
-            default_member_permissions: "8"
-          },
+           {
+             name: "deploy-defense",
+             description: "🛡️ Deploy all 6 Zero Trust Anti-Nuke Security Layers",
+             default_member_permissions: "8"
+           },
+           {
+             name: "setup-verify",
+             description: "✅ Deploy #verify channel with interactive button",
+             default_member_permissions: "8"
+           },
           {
             name: "setup-honeypot",
             description: "🍯 Deploy decoy Honeypot Trap link (Auto-bans IP & Discord if clicked)",
@@ -2606,7 +2596,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
         const parts = rawContent.slice(1).trim().split(/ +/);
         const pCmd = parts[0].toLowerCase();
 
-        if (pCmd === "deploy-defense" || pCmd === "zerotrust" || pCmd === "6layers" || pCmd === "6-layers" || pCmd === "security") {
+        if (pCmd === "deploy-defense" || pCmd === "6-layers" || pCmd === "security") {
           if (message.author.id !== message.guild.ownerId && !isOwnerOrWhitelisted(message.author.id, message.guild)) {
             await message.reply("❌ **Access Denied!** Requires Whitelisted Admin or Owner clearance.").catch(() => {});
             return;
@@ -2723,7 +2713,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             `• \`!dashboard\` / \`/dashboard\` - Web Control Panel link\n` +
             `• \`!setup-verify\` / \`/setup-verify\` - Create #verify channel & verification button\n` +
             `• \`!setup-honeypot\` / \`/setup-honeypot\` - Generate decoy Honeypot Trap link (Auto-bans IP & Discord)\n` +
-            `• \`!setup-invites\` / \`/setup-invite-tracker\` - Deploy real-time invite tracker\n` +
+             `• \`!setup-invite-tracker\` - Deploy real-time invite tracker\n` +
             `• \`!invites\` / \`/invites\` - Check invite statistics\n` +
             `• \`!ask <question>\` / \`/ask\` - Query the GOD AI Core Brain\n` +
             `• \`!sync\` - Force re-sync Slash Commands (\`/\`) directly to this server`
@@ -2788,7 +2778,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           return;
         }
 
-        if (pCmd === "recover" || pCmd === "nuke-reversal") {
+        if (pCmd === "recover") {
           if (message.author.id !== message.guild.ownerId && !isOwnerOrWhitelisted(message.author.id, message.guild)) {
             await message.reply("❌ **Access Denied!** Requires Whitelisted Admin or Owner clearance.").catch(() => {});
             return;
@@ -2903,7 +2893,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           return;
         }
 
-        if (pCmd === "setup-invite-tracker" || pCmd === "setup-invites") {
+        if (pCmd === "setup-invite-tracker") {
           if (message.author.id !== message.guild.ownerId && !isOwnerOrWhitelisted(message.author.id, message.guild)) {
             await message.reply("❌ **Access Denied!** Requires Whitelisted Admin or Owner clearance.").catch(() => {});
             return;
@@ -3446,54 +3436,64 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           const musicState = getOrCreateGuildMusicState(guild.id);
           const VoiceService = { playAudioInGuild, stopAudioInGuild, pauseAudioInGuild, resumeAudioInGuild };
 
-          if (commandName === "play") {
-             let query = interaction.options.getString("query") || "phonk";
-             if (query.length > 250) query = query.slice(0, 250);
-             if (musicState.queue.length >= 100) {
-               await interaction.reply({ content: "❌ **Queue Full:** Maximum queue limit of 100 tracks reached.", ephemeral: true });
-               return;
-             }
-             const { songUrl, title, artist, durationSeconds, thumbnail } = await getAudioStreamDetails(query);
-             const track = {
-                id: `track_${Date.now()}`,
-                title, artist, durationSeconds: durationSeconds || 210, url: songUrl, requestedBy: interaction.user.username,
-                thumbnail: thumbnail || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500'
-             };
-             
-             if (!musicState.currentTrack) {
-                musicState.currentTrack = track;
+           if (commandName === "play") {
+              let query = interaction.options.getString("query") || "phonk";
+              if (query.length > 250) query = query.slice(0, 250);
+              if (musicState.queue.length >= 100) {
+                await interaction.reply({ content: "❌ **Queue Full:** Maximum queue limit of 100 tracks reached.", ephemeral: true });
+                return;
+              }
+              const { songUrl, title, artist, durationSeconds, thumbnail } = await getAudioStreamDetails(query);
+              const track = {
+                 id: `track_${Date.now()}`,
+                 title, artist, durationSeconds: durationSeconds || 210, url: songUrl, requestedBy: interaction.user.username,
+                 thumbnail: thumbnail || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500'
+              };
+              
+              if (!musicState.currentTrack) {
+                 musicState.currentTrack = track;
+                 musicState.isPlaying = true;
+                 musicState.isPaused = false;
+                 musicState.positionSeconds = 0;
+                 const played = await playAudioInGuild(guild.id, track.url, userVoiceChannel.id);
+                 if (played) {
+                   await interaction.reply(`▶️ **Started Playing:** ${title} by ${artist}`);
+                 } else {
+                   await interaction.reply("❌ **Failed to play audio:** Could not connect to voice channel or start playback. Make sure I have permission to join and speak in your voice channel.");
+                   musicState.currentTrack = null;
+                   musicState.isPlaying = false;
+                 }
+              } else {
+                 musicState.queue.push(track);
+                 await interaction.reply(`📝 **Queued:** ${title} by ${artist}`);
+              }
+           } else if (commandName === "stop") {
+              musicState.currentTrack = null;
+              musicState.isPlaying = false;
+              musicState.isPaused = false;
+              musicState.queue = [];
+              await stopAudioInGuild(guild.id);
+              await interaction.reply(`⏹️ **Playback Stopped & Queue Cleared!**`);
+           } else if (commandName === "skip") {
+              if (musicState.queue.length > 0) {
+                musicState.currentTrack = musicState.queue.shift();
                 musicState.isPlaying = true;
                 musicState.isPaused = false;
                 musicState.positionSeconds = 0;
-                if (VoiceService && VoiceService.playAudioInGuild) VoiceService.playAudioInGuild(guild.id, track.url).catch(console.error);
-                await interaction.reply(`▶️ **Started Playing:** ${title} by ${artist}`);
-             } else {
-                musicState.queue.push(track);
-                await interaction.reply(`📝 **Queued:** ${title} by ${artist}`);
-             }
-          } else if (commandName === "stop") {
-             musicState.currentTrack = null;
-             musicState.isPlaying = false;
-             musicState.isPaused = false;
-             musicState.queue = [];
-             if (VoiceService && VoiceService.stopAudioInGuild) VoiceService.stopAudioInGuild(guild.id);
-             await interaction.reply(`⏹️ **Playback Stopped & Queue Cleared!**`);
-          } else if (commandName === "skip") {
-             if (musicState.queue.length > 0) {
-               musicState.currentTrack = musicState.queue.shift();
-               musicState.isPlaying = true;
-               musicState.isPaused = false;
-               musicState.positionSeconds = 0;
-               if (VoiceService && VoiceService.playAudioInGuild && musicState.currentTrack) {
-                 VoiceService.playAudioInGuild(guild.id, musicState.currentTrack.url).catch(console.error);
-               }
-               await interaction.reply(`⏭️ **Skipped! Now Playing:** ${musicState.currentTrack?.title}`);
-             } else {
-               musicState.currentTrack = null;
-               musicState.isPlaying = false;
-               if (VoiceService && VoiceService.stopAudioInGuild) VoiceService.stopAudioInGuild(guild.id);
-               await interaction.reply(`⏭️ **Skipped!** Queue is now empty.`);
-             }
+                const played = await playAudioInGuild(guild.id, musicState.currentTrack.url, userVoiceChannel.id);
+                if (played) {
+                  await interaction.reply(`⏭️ **Skipped! Now Playing:** ${musicState.currentTrack?.title}`);
+                } else {
+                  await interaction.reply("❌ **Failed to skip:** Could not connect to voice channel or start playback.");
+                  musicState.currentTrack = null;
+                  musicState.isPlaying = false;
+                }
+              } else {
+                musicState.currentTrack = null;
+                musicState.isPlaying = false;
+                await stopAudioInGuild(guild.id);
+                await interaction.reply(`⏭️ **Skipped!** Queue is now empty.`);
+              }
           } else if (commandName === "pause") {
              musicState.isPaused = true;
               await interaction.reply(`⏸️ **Paused!**`);
@@ -3583,7 +3583,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           return;
         }
 
-      if (commandName === "setup-invite-tracker" || commandName === "setup-invites") {
+      if (commandName === "setup-invite-tracker") {
         if (interaction.user.id !== guild.ownerId && !isOwnerOrWhitelisted(interaction.user.id, guild)) {
           await interaction.reply({ embeds: [{ title: "🛡️ ZERO TRUST ENGINE", description: "❌ **Access Denied!** Requires Whitelisted Admin or Owner clearance.", color: 0xDC2626 }], ephemeral: true });
           return;
@@ -3837,7 +3837,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
       }
 
       
-      if (commandName === "deploy-defense" || commandName === "zerotrust" || commandName === "6layers") {
+      if (commandName === "deploy-defense") {
         if (interaction.user.id !== guild.ownerId && !isOwnerOrWhitelisted(interaction.user.id, guild)) {
           await interaction.reply({ embeds: [{ title: "🛡️ ZERO TRUST ENGINE", description: "❌ **Access Denied!**\nThis action requires **E++** (Extreme) clearance.\nOnly the Server Owner or explicitly Whitelisted Admins can execute this action.\n*Your attempt has been logged.*", color: 0xDC2626 }], ephemeral: true });
           return;
@@ -4287,7 +4287,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
         return;
       }
 
-      if (commandName === "recover" || commandName === "nuke-reversal") {
+      if (commandName === "recover") {
         if (interaction.user.id !== guild.ownerId && !isOwnerOrWhitelisted(interaction.user.id, guild)) {
           await interaction.reply({ embeds: [{ title: "🛡️ ZERO TRUST ENGINE", description: "❌ **Access Denied!**\nThis action requires **E++** (Extreme) clearance.\nOnly the Server Owner or explicitly Whitelisted Admins can execute this action.\n*Your attempt has been logged.*", color: 0xDC2626 }], ephemeral: true });
           return;
