@@ -22,19 +22,12 @@ import {
   ShieldAlert,
   Gauge,
   Cpu,
-  MemoryStick,
-  HardDrive,
-  Network,
-  Clock,
-  Search,
-  Filter,
   BarChart3,
   Bug,
-  XCircle,
   FileText,
   Users,
-  ShieldX,
-  Download
+  HardDrive,
+  Clock
 } from 'lucide-react';
 
 import OverviewTab from './components/OverviewTab';

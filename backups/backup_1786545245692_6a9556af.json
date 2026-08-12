@@ -1,9 +1,0 @@
-{
-  "id": "backup_1786545245692_6a9556af",
-  "timestamp": "2026-08-12T14:34:05.692Z",
-  "version": 672,
-  "size": 76,
-  "encrypted": false,
-  "checksum": "f665f5a9fb76eb75d8d4db461aaa53ebea80d30d0d2e3f76764595af76b608ec",
-  "data": "{\"emoji\":\"🔥💀\",\"chinese\":\"中文测试\",\"sql\":\"'; DROP TABLE users;--\"}"
-}

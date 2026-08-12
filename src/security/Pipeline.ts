@@ -1,5 +1,3 @@
-import crypto from "crypto";
-
 export interface SecurityEvent {
   type: string;
   userId: string;

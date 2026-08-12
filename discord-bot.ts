@@ -2,10 +2,6 @@
 import fs from "fs";
 import path from "path";
 import { GoogleGenAI } from "@google/genai";
-import { Readable } from "stream";
-import { spawn } from "child_process";
-import https from "https";
-import http from "http";
 import { 
   Client, 
   GatewayIntentBits, 

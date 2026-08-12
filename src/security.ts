@@ -9,7 +9,7 @@ export function scanForSecrets(content: string): string[] {
   const findings: string[] = [];
   if (!content || typeof content !== "string") return findings;
   const patterns = [
-    /ghp_[a-zA-Z0-9]{36}/gi,
+    /ghp_[a-zA-Z0-9]{36,38}/gi,
     /AIzaSy[a-zA-Z0-9_-]{33}/gi,
     /M[A-Za-z0-9_-]{23,28}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,38}/g,
     /xox[baprs]-[0-9a-zA-Z-]+/g,

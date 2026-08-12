@@ -1,9 +1,0 @@
-{
-  "id": "backup_1786544148989_7ac7066b",
-  "timestamp": "2026-08-12T14:15:48.989Z",
-  "version": 2,
-  "size": 119,
-  "encrypted": true,
-  "checksum": "100f6bbcd398ab768cf8da359cb332508d78f1cf4fa05e481f0113abcd8ad5d6",
-  "data": "{\"encrypted\":\"adfdca4b620ce6c240e42715b8\",\"iv\":\"de0050ac41a28d30db01d220\",\"authTag\":\"c0e1d8a3acbfff82e56f3768901028fc\"}"
-}

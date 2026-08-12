@@ -5,6 +5,8 @@ import crypto from "crypto";
 import path from "path";
 import { Buffer } from "buffer";
 
+const AI_QUOTA_WARNING = "AI Quota limit reached in SecurityFeatures.";
+
 // Helper for atomic file writes with file permissions 0600
 export function atomicWriteJsonSync(filePath: string, data: any) {
   const tmpPath = `${filePath}.${crypto.randomBytes(6).toString("hex")}.tmp`;
@@ -23,7 +25,7 @@ export function atomicWriteJsonSync(filePath: string, data: any) {
   } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
     if (fs.existsSync(tmpPath)) {
       try { fs.unlinkSync(tmpPath); } catch {}
@@ -133,7 +135,7 @@ export class TokenVault {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       this.triggerSelfDestruct("Memory decryption failed - Possible memory tampering.");
       return "";
@@ -475,7 +477,7 @@ export class WebhookGuard {
       } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }}
     }
   }
@@ -532,7 +534,7 @@ export class AIDeepScan {
     } catch (error: any) {
       const errStr = String(error?.message || error).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       console.error("AI Scan Error:", error);
       return 0;
@@ -573,7 +575,7 @@ export class Quarantine {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }}
   }
 }
@@ -630,7 +632,7 @@ export class SentimentTracker {
     } catch (e: any) {
       const errStr = String(e?.message || e).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       apiKey = process.env.GEMINI_API_KEY;
     }
@@ -713,7 +715,7 @@ Message: "${message.content}"`;
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
     }
   }
@@ -790,7 +792,7 @@ export class OAuthMaliciousAppDetector {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       return { scanned: 0, threatsFound: 0 };
     }
@@ -875,7 +877,7 @@ export class ServerSnapshotRestore {
         } catch (e: any) {
       const errStr = String(e?.message || e).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }}
       }
       return loaded.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -1097,7 +1099,7 @@ Include 1 proactive recommendation for server admins. Keep it scannable and auth
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       return "📊 **Daily AI Security Report**\n- 100/100 Zero Trust Active\n- No active breach vectors detected.";
     }
@@ -1131,7 +1133,7 @@ export class AICommandAssistant {
     } catch (e: any) {
       const errStr = String(e?.message || e).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       return "Processed request with default Zero Trust policy.";
     }
@@ -1190,7 +1192,7 @@ export class IPBanSystem {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error loading IP bans:", err);
       return [];
@@ -1204,7 +1206,7 @@ export class IPBanSystem {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error saving IP bans:", err);
     }
@@ -1223,7 +1225,7 @@ export class IPBanSystem {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error loading verified IPs:", err);
       return [];
@@ -1237,7 +1239,7 @@ export class IPBanSystem {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error saving verified IPs:", err);
     }
@@ -2187,7 +2189,7 @@ export class AdminWhitelistSystem {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error loading Admin Whitelist:", err);
       return [];
@@ -2201,7 +2203,7 @@ export class AdminWhitelistSystem {
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-        console.warn("AI Quota limit reached in SecurityFeatures.");
+        console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error saving Admin Whitelist:", err);
     }

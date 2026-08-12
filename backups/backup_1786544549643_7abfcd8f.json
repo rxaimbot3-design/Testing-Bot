@@ -1,9 +1,0 @@
-{
-  "id": "backup_1786544549643_7abfcd8f",
-  "timestamp": "2026-08-12T14:22:29.643Z",
-  "version": 338,
-  "size": 393,
-  "encrypted": false,
-  "checksum": "bbf12151c766f13f522e807a15266c228180ca63939a02671e03547777777f2e",
-  "data": "{\"id\":\"388eea72b0a29476ab1b10850b71473f\",\"value\":\"39b09aa244d9faae89c10dc4969690239a18b4a2c341ca4763d7049dcce994dea910f3bee4afeec1f7bfb075ac3b273fad1e039f547ebbcace48c3e152d092ed89fcf1b950a9698fbb95a881d81841df6a734fabb58ec688b77339ea062c20c8790a1b03e0e4c30d7e33abdb245a0c7bf2e9e7daddcb3c87e0f8cc7e8533172c\",\"nested\":{\"deep\":\"5d2bde112e095bdf15f858cfe5ebe5b7ded5a65123feeb3c9c78e16610f8431a\"}}"
-}
