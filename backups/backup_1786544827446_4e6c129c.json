@@ -1,0 +1,10 @@
+{
+  "id": "backup_1786544827446_4e6c129c",
+  "timestamp": "2026-08-12T14:27:07.446Z",
+  "label": "backup/with:special?chars",
+  "version": 505,
+  "size": 13,
+  "encrypted": false,
+  "checksum": "6fd977db9b2afe87a9ceee48432881299a6aaf83d935fbbe83007660287f9c2e",
+  "data": "{\"test\":true}"
+}
