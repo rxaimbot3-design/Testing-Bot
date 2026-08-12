@@ -3,6 +3,7 @@
 #include <vector>
 #include <chrono>
 #include <cstring>
+#include <openssl/evp.h>
 
 class SecurityEngine : public Napi::ObjectWrap<SecurityEngine> {
 public:
@@ -136,26 +137,34 @@ Napi::Value SecurityEngine::ComputeHash(const Napi::CallbackInfo& info) {
   auto start = std::chrono::high_resolution_clock::now();
 
   std::string hash;
+  const EVP_MD* md = nullptr;
   if (algorithm == "sha256") {
-    // For simplicity, we'll use a basic checksum. In production, use OpenSSL or similar.
-    uint64_t h = 0xFFFFFFFFFFFFFFFFULL;
-    for (size_t i = 0; i < data.size(); i++) {
-      h = (h * 31) ^ static_cast<uint64_t>(data[i]);
-    }
-    char buf[17];
-    snprintf(buf, sizeof(buf), "%016lx", h);
-    hash = buf;
+    md = EVP_sha256();
   } else if (algorithm == "sha512") {
-    uint64_t h1 = 0xFFFFFFFFFFFFFFFFULL;
-    uint64_t h2 = 0xFFFFFFFFFFFFFFFFULL;
-    for (size_t i = 0; i < data.size(); i++) {
-      h1 = (h1 * 37) ^ static_cast<uint64_t>(data[i]);
-      h2 = (h2 * 41) ^ static_cast<uint64_t>(data[i]);
+    md = EVP_sha512();
+  }
+
+  if (md) {
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (ctx) {
+      unsigned char digest[EVP_MAX_MD_SIZE];
+      unsigned int digestLen = 0;
+
+      if (EVP_DigestInit_ex(ctx, md, nullptr) &&
+          EVP_DigestUpdate(ctx, data.c_str(), data.size()) &&
+          EVP_DigestFinal_ex(ctx, digest, &digestLen)) {
+        char buf[EVP_MAX_MD_SIZE * 2 + 1];
+        for (unsigned int i = 0; i < digestLen; i++) {
+          sprintf(buf + i * 2, "%02x", digest[i]);
+        }
+        hash = std::string(buf, digestLen * 2);
+      }
+
+      EVP_MD_CTX_free(ctx);
     }
-    char buf[33];
-    snprintf(buf, sizeof(buf), "%016lx%016lx", h1, h2);
-    hash = buf;
-  } else {
+  }
+
+  if (hash.empty()) {
     uint32_t crc = 0xFFFFFFFF;
     for (size_t i = 0; i < data.size(); i++) {
       crc ^= static_cast<uint32_t>(data[i]);
@@ -187,7 +196,7 @@ Napi::Value SecurityEngine::GetMetrics(const Napi::CallbackInfo& info) {
   int64_t throughput = static_cast<int64_t>(auditCounter / elapsedSec);
 
   Napi::Object metrics = Napi::Object::New(info.Env());
-  metrics.Set("engineName", "C++ Native Security Core (N-API)");
+  metrics.Set("engineName", "C++ Native Security Core (N-API + OpenSSL EVP)");
   metrics.Set("architecture", std::string(getenv("HOSTTYPE") ? getenv("HOSTTYPE") : "x86_64") + " Native");
   metrics.Set("status", "ACTIVE_MICROSECOND");
   metrics.Set("memoryAllocatedBytes", static_cast<int64_t>(memoryArena.capacity() * sizeof(uint32_t)));
