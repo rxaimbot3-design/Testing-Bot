@@ -585,7 +585,56 @@ app.get("/api/download/source", (req, res) => {
   }
 });
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "Enterprise Discord Bot Core Server is running." });
+  const startTime = Date.now();
+  const checks: any = {
+    api: { status: "up", latencyMs: Date.now() - startTime },
+    database: { status: "up" },
+    redis: { status: "up" },
+    cppEngine: { status: "up", mode: "native" },
+    discordBot: { status: "up" }
+  };
+
+  try {
+    if (MongoRedisEngine.isMongoConnected) {
+      checks.database = { status: "up" };
+    } else {
+      checks.database = { status: "down" };
+    }
+  } catch {
+    checks.database = { status: "down" };
+  }
+
+  try {
+    const redisStats = MongoRedisEngine.getRedisStats();
+    checks.redis = { status: redisStats?.connected ? "up" : "down" };
+  } catch {
+    checks.redis = { status: "down" };
+  }
+
+  try {
+    const cppMetrics = CppNativeEngine.getMetrics();
+    checks.cppEngine = { status: cppMetrics?.status !== "OFFLINE" ? "up" : "down", mode: "native" };
+  } catch {
+    checks.cppEngine = { status: "down", mode: "native" };
+  }
+
+  try {
+    const client = getClient();
+    checks.discordBot = { status: client?.isReady() ? "up" : "down" };
+  } catch {
+    checks.discordBot = { status: "down" };
+  }
+
+  const allUp = Object.values(checks).every((c: any) => c.status === "up");
+  const status = allUp ? "healthy" : "degraded";
+
+  res.json({
+    status,
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+    checks,
+    version: "1.0.0"
+  });
 });
 
 // Authentication & Session Endpoints
@@ -2522,7 +2571,11 @@ async function setupServer() {
   });
 }
 
-setupServer().catch((err) => {
-  console.error("Failed to setup server:", err);
-  process.exit(1);
-});
+export { app };
+
+if (process.env.NODE_ENV !== 'test') {
+  setupServer().catch((err) => {
+    console.error("Failed to setup server:", err);
+    process.exit(1);
+  });
+}

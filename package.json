@@ -15,11 +15,23 @@
     "start": "cross-env NODE_ENV=production node server-build/server.cjs",
     "clean": "rm -rf dist server-build server.js",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/security.test.ts tests/pipeline.test.ts tests/backup.test.ts tests/cpp-engine.test.ts",
+    "test:integration": "vitest run tests/dashboard.test.ts",
+    "test:e2e": "vitest run tests/e2e.test.ts",
+    "test:fuzz": "vitest run tests/fuzz.test.ts",
+    "test:load": "vitest run tests/load.test.ts",
+    "test:stress": "vitest run tests/stress.test.ts",
+    "test:regression": "vitest run tests/regression.test.ts",
+    "test:all": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "security:scan": "npm audit --audit-level=high"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/supertest": "^6.0.2",
     "@vitest/coverage-v8": "^3.0.0",
+    "supertest": "^6.3.4",
     "vitest": "^3.0.0"
   },
   "dependencies": {

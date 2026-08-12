@@ -17,7 +17,24 @@ import {
   Zap,
   Activity,
   UserCheck,
-  Music
+  Music,
+  AlertTriangle,
+  ShieldAlert,
+  Gauge,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  Network,
+  Clock,
+  Search,
+  Filter,
+  BarChart3,
+  Bug,
+  XCircle,
+  FileText,
+  Users,
+  ShieldX,
+  Download
 } from 'lucide-react';
 
 import OverviewTab from './components/OverviewTab';
@@ -33,6 +50,17 @@ import GitHubTab from './components/GitHubTab';
 import VerificationTab from './components/VerificationTab';
 import MusicPlayerTab from './components/MusicPlayerTab';
 import TopFiveFeaturesBar from './components/TopFiveFeaturesBar';
+import LiveSecurityEventsTab from './components/LiveSecurityEventsTab';
+import AttackTimelineTab from './components/AttackTimelineTab';
+import RiskScoreTab from './components/RiskScoreTab';
+import SystemHealthTab from './components/SystemHealthTab';
+import EventThroughputTab from './components/EventThroughputTab';
+import DetectionLatencyTab from './components/DetectionLatencyTab';
+import AuditLogsTab from './components/AuditLogsTab';
+import ErrorMonitoringTab from './components/ErrorMonitoringTab';
+import BackupStatusTab from './components/BackupStatusTab';
+import TrustSystemTab from './components/TrustSystemTab';
+import HealthCheck from './components/HealthCheck';
 import { parseMusicIntent } from './services/musicIntentService';
 import { apiFetch, checkSession, loginWithAdminKey, logoutAdmin, getAdminToken, loginWithDiscordToken } from './services/apiClient';
 
@@ -50,7 +78,17 @@ type DashboardTab =
   | 'settings' 
   | 'economy' 
   | 'discord-connect' 
-  | 'github';
+  | 'github'
+  | 'live-security'
+  | 'attack-timeline'
+  | 'risk-score'
+  | 'system-health'
+  | 'event-throughput'
+  | 'detection-latency'
+  | 'audit-logs'
+  | 'error-monitoring'
+  | 'backup-status'
+  | 'trust-system';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
@@ -329,8 +367,18 @@ export default function App() {
     { id: 'aisystem', icon: Sparkles, label: 'AI System & Insights', category: 'INTELLIGENCE' },
     { id: 'music', icon: Music, label: 'AI Voice DJ & Music', category: 'ENTERTAINMENT' },
     { id: 'verification', icon: UserCheck, label: 'Verification System & CAPTCHA', category: 'SECURITY' },
-    { id: 'embeds', icon: Palette, label: 'Visual Embed Builder', category: 'BUILDER' },
     { id: 'security', icon: ShieldCheck, label: 'Security & Database Backup', category: 'PROTECTION' },
+    { id: 'live-security', icon: AlertTriangle, label: 'Live Security Events', category: 'MONITORING' },
+    { id: 'attack-timeline', icon: Activity, label: 'Attack Timeline', category: 'MONITORING' },
+    { id: 'risk-score', icon: Gauge, label: 'Risk Score', category: 'ANALYTICS' },
+    { id: 'system-health', icon: Cpu, label: 'System Health', category: 'MONITORING' },
+    { id: 'event-throughput', icon: BarChart3, label: 'Event Throughput', category: 'ANALYTICS' },
+    { id: 'detection-latency', icon: Clock, label: 'Detection Latency', category: 'ANALYTICS' },
+    { id: 'audit-logs', icon: FileText, label: 'Audit Logs', category: 'COMPLIANCE' },
+    { id: 'error-monitoring', icon: Bug, label: 'Error Monitoring', category: 'MONITORING' },
+    { id: 'backup-status', icon: HardDrive, label: 'Backup Status', category: 'OPERATIONS' },
+    { id: 'trust-system', icon: Users, label: 'Trust System', category: 'SECURITY' },
+    { id: 'embeds', icon: Palette, label: 'Visual Embed Builder', category: 'BUILDER' },
     { id: 'tickets', icon: Ticket, label: 'Tickets & User Control', category: 'MANAGEMENT' },
     { id: 'billing', icon: Key, label: 'License Keys & Analytics', category: 'ENTERPRISE' },
     { id: 'settings', icon: Settings, label: 'Themes & Multi-Language', category: 'SYSTEM' },
@@ -644,6 +692,46 @@ export default function App() {
 
               {activeTab === 'github' && (
                 <GitHubTab />
+              )}
+
+              {activeTab === 'live-security' && (
+                <LiveSecurityEventsTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'attack-timeline' && (
+                <AttackTimelineTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'risk-score' && (
+                <RiskScoreTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'system-health' && (
+                <SystemHealthTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'event-throughput' && (
+                <EventThroughputTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'detection-latency' && (
+                <DetectionLatencyTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'audit-logs' && (
+                <AuditLogsTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'error-monitoring' && (
+                <ErrorMonitoringTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'backup-status' && (
+                <BackupStatusTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'trust-system' && (
+                <TrustSystemTab onAddLog={handleAddLog} />
               )}
             </motion.div>
           </AnimatePresence>
