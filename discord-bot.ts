@@ -2556,7 +2556,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
     client.on("messageCreate", async (message) => {
       if (!message || message.author?.bot) return;
 
-      // Military-Grade Feature: Sentiment & Toxicity Scanner
+      // Sentiment & Toxicity Scanner
       if (message.content) {
         SentimentTracker.analyzeMessage(message, (msg) => addBotLog(msg, "warning"));
       }

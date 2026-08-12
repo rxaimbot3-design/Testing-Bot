@@ -466,7 +466,7 @@ class SyncEngine {
       memoryUsedMB: 0,
       averageLatencyMicroseconds: 12,
       throughputPerSecond: 0,
-      simdAcceleration: true,
+      simdAcceleration: false,
       activeThreads: os.cpus().length || 1,
       totalAuditsProcessed: 0
     };
@@ -484,7 +484,9 @@ class SyncEngine {
     const endTime = process.hrtime.bigint();
     const latencyMicros = Math.max(1, Math.round(Number(endTime - startTime) / 1000));
     this.lastLatencyMicros = latencyMicros;
-    return { passed: true, latencyMicros, score: Math.max(0, 100 - riskWeight * 10) };
+    const score = Math.min(100, Math.max(0, riskWeight / 10));
+    const passed = score < 50; // PASS if score < 50, FLAG if 25-49, BLOCK if >= 50
+    return { passed, latencyMicros, score };
   }
 
   getMetrics(): CppEngineMetrics {

@@ -559,7 +559,7 @@ export class Quarantine {
 
       const manageableRoles = member.roles.cache.filter((r: any) => r.id !== guild.id && r.editable);
       await member.roles.remove(manageableRoles, "Applying Shadow Ban").catch(() => {});
-      await member.roles.add(role, "Military-Grade Ghost Jail Applied").catch(() => {});
+      await member.roles.add(role, "Ghost Jail Applied").catch(() => {});
       
       console.log(`☣️ [SILENT JAIL] User ${member.user.tag} has been shadow-banned and isolated.`);
     } catch (err: any) {

@@ -2,7 +2,7 @@
   "name": "ultimate-discord-ai-bot",
   "private": true,
   "version": "1.0.0",
-  "description": "Military-Grade Discord AI Bot with Zero-Trust Security, Ghost Bypass Protection, and Live Sentiment AI",
+  "description": "Discord AI Bot with Zero-Trust Security, Ghost Bypass Protection, and Live Sentiment AI",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"

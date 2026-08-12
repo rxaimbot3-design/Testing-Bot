@@ -60,8 +60,8 @@ export function auditSecrets(rootDir: string = process.cwd()): { clean: boolean;
   function isGitignored(filePath: string): boolean {
     try {
       const { execSync } = require("child_process");
-      const result = execSync(`git check-ignore -q "${filePath}"`, { cwd: rootDir, encoding: "utf8" });
-      return result.code === 0;
+      execSync(`git check-ignore -q "${filePath}"`, { cwd: rootDir, encoding: "utf8" });
+      return true;
     } catch {
       return false;
     }
