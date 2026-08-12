@@ -3446,54 +3446,65 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           const musicState = getOrCreateGuildMusicState(guild.id);
           const VoiceService = { playAudioInGuild, stopAudioInGuild, pauseAudioInGuild, resumeAudioInGuild };
 
-          if (commandName === "play") {
-             let query = interaction.options.getString("query") || "phonk";
-             if (query.length > 250) query = query.slice(0, 250);
-             if (musicState.queue.length >= 100) {
-               await interaction.reply({ content: "❌ **Queue Full:** Maximum queue limit of 100 tracks reached.", ephemeral: true });
-               return;
-             }
-             const { songUrl, title, artist, durationSeconds, thumbnail } = await getAudioStreamDetails(query);
-             const track = {
-                id: `track_${Date.now()}`,
-                title, artist, durationSeconds: durationSeconds || 210, url: songUrl, requestedBy: interaction.user.username,
-                thumbnail: thumbnail || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500'
-             };
-             
-             if (!musicState.currentTrack) {
-                musicState.currentTrack = track;
+           if (commandName === "play") {
+              let query = interaction.options.getString("query") || "phonk";
+              if (query.length > 250) query = query.slice(0, 250);
+              if (musicState.queue.length >= 100) {
+                await interaction.reply({ content: "❌ **Queue Full:** Maximum queue limit of 100 tracks reached.", ephemeral: true });
+                return;
+              }
+              const isYouTube = /youtube\.com|youtu\.be/.test(query.toLowerCase());
+              const { songUrl, title, artist, durationSeconds, thumbnail } = await getAudioStreamDetails(query);
+              const track = {
+                 id: `track_${Date.now()}`,
+                 title, artist, durationSeconds: durationSeconds || 210, url: songUrl, requestedBy: interaction.user.username,
+                 thumbnail: thumbnail || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500'
+              };
+              
+              if (!musicState.currentTrack) {
+                 musicState.currentTrack = track;
+                 musicState.isPlaying = true;
+                 musicState.isPaused = false;
+                 musicState.positionSeconds = 0;
+                 const played = await playAudioInGuild(guild.id, track.url, userVoiceChannel.id);
+                 if (played) {
+                   await interaction.reply(`▶️ **Started Playing:** ${title} by ${artist}`);
+                 } else {
+                   await interaction.reply("❌ **Failed to play audio:** Could not connect to voice channel or start playback. Make sure I have permission to join and speak in your voice channel.");
+                   musicState.currentTrack = null;
+                   musicState.isPlaying = false;
+                 }
+              } else {
+                 musicState.queue.push(track);
+                 await interaction.reply(`📝 **Queued:** ${title} by ${artist}`);
+              }
+           } else if (commandName === "stop") {
+              musicState.currentTrack = null;
+              musicState.isPlaying = false;
+              musicState.isPaused = false;
+              musicState.queue = [];
+              await stopAudioInGuild(guild.id);
+              await interaction.reply(`⏹️ **Playback Stopped & Queue Cleared!**`);
+           } else if (commandName === "skip") {
+              if (musicState.queue.length > 0) {
+                musicState.currentTrack = musicState.queue.shift();
                 musicState.isPlaying = true;
                 musicState.isPaused = false;
                 musicState.positionSeconds = 0;
-                if (VoiceService && VoiceService.playAudioInGuild) VoiceService.playAudioInGuild(guild.id, track.url).catch(console.error);
-                await interaction.reply(`▶️ **Started Playing:** ${title} by ${artist}`);
-             } else {
-                musicState.queue.push(track);
-                await interaction.reply(`📝 **Queued:** ${title} by ${artist}`);
-             }
-          } else if (commandName === "stop") {
-             musicState.currentTrack = null;
-             musicState.isPlaying = false;
-             musicState.isPaused = false;
-             musicState.queue = [];
-             if (VoiceService && VoiceService.stopAudioInGuild) VoiceService.stopAudioInGuild(guild.id);
-             await interaction.reply(`⏹️ **Playback Stopped & Queue Cleared!**`);
-          } else if (commandName === "skip") {
-             if (musicState.queue.length > 0) {
-               musicState.currentTrack = musicState.queue.shift();
-               musicState.isPlaying = true;
-               musicState.isPaused = false;
-               musicState.positionSeconds = 0;
-               if (VoiceService && VoiceService.playAudioInGuild && musicState.currentTrack) {
-                 VoiceService.playAudioInGuild(guild.id, musicState.currentTrack.url).catch(console.error);
-               }
-               await interaction.reply(`⏭️ **Skipped! Now Playing:** ${musicState.currentTrack?.title}`);
-             } else {
-               musicState.currentTrack = null;
-               musicState.isPlaying = false;
-               if (VoiceService && VoiceService.stopAudioInGuild) VoiceService.stopAudioInGuild(guild.id);
-               await interaction.reply(`⏭️ **Skipped!** Queue is now empty.`);
-             }
+                const played = await playAudioInGuild(guild.id, musicState.currentTrack.url, userVoiceChannel.id);
+                if (played) {
+                  await interaction.reply(`⏭️ **Skipped! Now Playing:** ${musicState.currentTrack?.title}`);
+                } else {
+                  await interaction.reply("❌ **Failed to skip:** Could not connect to voice channel or start playback.");
+                  musicState.currentTrack = null;
+                  musicState.isPlaying = false;
+                }
+              } else {
+                musicState.currentTrack = null;
+                musicState.isPlaying = false;
+                await stopAudioInGuild(guild.id);
+                await interaction.reply(`⏭️ **Skipped!** Queue is now empty.`);
+              }
           } else if (commandName === "pause") {
              musicState.isPaused = true;
               await interaction.reply(`⏸️ **Paused!**`);
