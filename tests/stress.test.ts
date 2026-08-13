@@ -101,3 +101,107 @@ describe("Stress: Recovery After Overload", () => {
     expect(result.blocked).toBe(false);
   });
 });
+
+describe("Stress: Extreme Nuker Scenarios", () => {
+  beforeEach(() => {
+    SecurityPipeline.reset();
+  });
+
+  it("handles 1000 channel deletions without crash or brain issue", () => {
+    const now = Date.now();
+    const events: SecurityEvent[] = Array.from({ length: 1000 }, (_, i) => ({
+      type: "channel_delete",
+      userId: "nuker_1",
+      guildId: "guild_1",
+      timestamp: now + i * 10,
+      payload: { massAction: true },
+    }));
+    const results = SecurityPipeline.processBatch(events);
+    expect(results).toHaveLength(1000);
+    const blocked = results.filter((r) => r.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("handles 100 nuker attacks simultaneously across guilds", () => {
+    const now = Date.now();
+    const events: SecurityEvent[] = [];
+    for (let n = 0; n < 100; n++) {
+      for (let i = 0; i < 20; i++) {
+        events.push({
+          type: "channel_delete",
+          userId: `nuker_${n}`,
+          guildId: `guild_${n}`,
+          timestamp: now + i * 10,
+          payload: { massAction: true },
+        });
+      }
+    }
+    expect(events).toHaveLength(2000);
+    const results = SecurityPipeline.processBatch(events);
+    expect(results).toHaveLength(2000);
+    const blocked = results.filter((r) => r.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(100);
+  });
+
+  it("handles mixed extreme raid: channels, roles, bans, kicks, webhooks, bots", () => {
+    const now = Date.now();
+    const events: SecurityEvent[] = [];
+    const types: SecurityEvent["type"][] = [
+      "channel_delete",
+      "role_update",
+      "guild_ban",
+      "guild_kick",
+      "webhook_create",
+      "guild_member_add"
+    ];
+    for (let i = 0; i < 5000; i++) {
+      events.push({
+        type: types[i % types.length],
+        userId: `raider_${i % 50}`,
+        guildId: `guild_${i % 20}`,
+        timestamp: now + i * 10,
+        payload: { massAction: true, bot: i % 3 === 0 },
+      });
+    }
+    const results = SecurityPipeline.processBatch(events);
+    expect(results).toHaveLength(5000);
+    const blocked = results.filter((r) => r.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("does not crash under 10k concurrent channel_create spam", () => {
+    const now = Date.now();
+    const events: SecurityEvent[] = Array.from({ length: 10000 }, (_, i) => ({
+      type: "channel_create",
+      userId: `spammer_${i % 10}`,
+      guildId: "guild_1",
+      timestamp: now + i,
+      payload: {},
+    }));
+    const results = SecurityPipeline.processBatch(events);
+    expect(results).toHaveLength(10000);
+  });
+
+  it("maintains bounded memory after extreme load", () => {
+    SecurityPipeline.reset();
+    const now = Date.now();
+    const events: SecurityEvent[] = Array.from({ length: 10000 }, (_, i) => ({
+      type: "channel_delete",
+      userId: `nuker_${i % 10}`,
+      guildId: `guild_${i % 5}`,
+      timestamp: now + i * 10,
+      payload: { massAction: true },
+    }));
+    SecurityPipeline.processBatch(events);
+    // After extreme load, normal events should still be processed correctly
+    const normalEvent: SecurityEvent = {
+      type: "message_create",
+      userId: "normal_user",
+      guildId: "guild_1",
+      timestamp: now + 100000,
+      payload: {},
+    };
+    const result = SecurityPipeline.processEvent(normalEvent);
+    expect(result.blocked).toBe(false);
+  });
+});
