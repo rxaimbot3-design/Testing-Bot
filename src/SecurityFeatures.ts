@@ -1474,8 +1474,8 @@ export interface UserInviteData {
 }
 
 export class InviteTrackerEngine {
-  private static userInvites = new Map<string, Map<string, UserInviteData>>();
-  private static invitedByMap = new Map<string, Map<string, string>>();
+  private static userInvites = new TtlMap<string, Map<string, UserInviteData>>({ ttlMs: 30 * 24 * 60 * 60 * 1000, maxEntries: 1000, autoCleanupMs: 600000 });
+  private static invitedByMap = new TtlMap<string, Map<string, string>>({ ttlMs: 30 * 24 * 60 * 60 * 1000, maxEntries: 1000, autoCleanupMs: 600000 });
 
   static getUserData(guildId: string, userId: string): UserInviteData {
     if (!this.userInvites.has(guildId)) {
@@ -1647,7 +1647,7 @@ export class DailyBackup {
 
 // 12. Anomaly AI Engine
 export class AnomalyAI {
-  private static actionHistory = new Map<string, number[]>();
+  private static actionHistory = new TtlMap<string, number[]>({ ttlMs: 60 * 60 * 1000, maxEntries: 10000, autoCleanupMs: 300000 });
 
   static recordAction(userId: string): void {
     const now = Date.now();
