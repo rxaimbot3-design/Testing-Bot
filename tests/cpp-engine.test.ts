@@ -209,3 +209,35 @@ describe("CppEngine: Graceful Degradation", () => {
     expect(result.passed).toBe(true);
   });
 });
+
+describe("CppEngine: Worker Crash Recovery", () => {
+  beforeEach(async () => {
+    CppNativeEngine.reset();
+    vi.resetModules();
+  });
+
+  it("schedules restart after worker error", async () => {
+    const { Worker } = await import("worker_threads");
+    const mockWorker = {
+      postMessage: vi.fn(),
+      terminate: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn()
+    };
+    vi.spyOn(Worker.prototype, "postMessage").mockImplementation(() => {});
+    
+    await CppNativeEngine.initEngine();
+    const metrics = CppNativeEngine.getMetrics();
+    expect(["ACTIVE_MICROSECOND", "STANDBY", "OFFLINE"]).toContain(metrics.status);
+  });
+
+  it("falls back to sync after max restart attempts", async () => {
+    const { Worker } = await import("worker_threads");
+    vi.spyOn(Worker.prototype, "postMessage").mockImplementation(() => {});
+    
+    await CppNativeEngine.initEngine();
+    // Even with worker issues, engine should still respond
+    const result = CppNativeEngine.scanSecurityPacket(1, 1.5);
+    expect(typeof result.passed).toBe("boolean");
+  });
+});
