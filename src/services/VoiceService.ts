@@ -9,6 +9,7 @@ import {
   StreamType 
 } from '@discordjs/voice';
 import { getClient, addBotLog } from '../../discord-bot';
+import { PermissionFlagsBits } from 'discord.js';
 import { getOrCreateGuildMusicState } from './MusicManager.js';
 
 const guildPlayers = new Map<string, ReturnType<typeof createAudioPlayer>>();
@@ -38,14 +39,45 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
     // Validate or find a voice channel
     let targetChannel = targetChannelId ? guild.channels.cache.get(targetChannelId) : null;
     if (!targetChannel || !targetChannel.isVoiceBased()) {
-      targetChannel = guild.channels.cache.find((c: any) => c.isVoiceBased() && c.members.size > 0);
-      if (!targetChannel) {
-        targetChannel = guild.channels.cache.find((c: any) => c.isVoiceBased());
+      // Try to fetch from API if not in cache
+      if (targetChannelId) {
+        try {
+          targetChannel = await guild.channels.fetch(targetChannelId);
+        } catch {}
+      }
+      if (!targetChannel || !targetChannel.isVoiceBased()) {
+        targetChannel = guild.channels.cache.find((c: any) => c.isVoiceBased() && c.members.size > 0);
+        if (!targetChannel) {
+          targetChannel = guild.channels.cache.find((c: any) => c.isVoiceBased());
+        }
       }
     }
     
     if (!targetChannel) {
       logFunc(`🎵 Cannot play music in ${guild.name} - no voice channels found.`, "warning");
+      return false;
+    }
+
+    // Check if voice channel is full
+    if (targetChannel.members.size >= targetChannel.userLimit && targetChannel.userLimit > 0) {
+      logFunc(`❌ Voice channel '${targetChannel.name}' is full in ${guild.name}.`, "error");
+      return false;
+    }
+
+    // Check bot permissions
+    const botMember = guild.members.me;
+    if (!botMember) {
+      logFunc(`❌ Bot is not a member of ${guild.name}.`, "error");
+      return false;
+    }
+
+    const botPermissions = targetChannel.permissionsFor(botMember);
+    if (!botPermissions?.has(PermissionFlagsBits.Connect)) {
+      logFunc(`❌ Missing Connect permission in voice channel '${targetChannel.name}' in ${guild.name}.`, "error");
+      return false;
+    }
+    if (!botPermissions?.has(PermissionFlagsBits.Speak)) {
+      logFunc(`❌ Missing Speak permission in voice channel '${targetChannel.name}' in ${guild.name}.`, "error");
       return false;
     }
 
@@ -72,6 +104,7 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
       // Wait for voice connection to be ready before playing
       await new Promise((resolve, reject) => {
         if (connection.state.status === VoiceConnectionStatus.Ready) {
+          console.log(`[VoiceService] Connection already ready for ${guild.name}`);
           resolve(true);
           return;
         }
@@ -81,6 +114,7 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
 
         connection.on(VoiceConnectionStatus.Ready, () => {
           clearTimeout(timeout);
+          console.log(`[VoiceService] Connection ready for ${guild.name}`);
           resolve(true);
         });
 
@@ -92,6 +126,33 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
         logFunc(`❌ Voice connection failed in ${guild.name}: ${err.message}`, "error");
         return false;
       });
+    } else {
+      console.log(`[VoiceService] Reusing existing voice connection for ${guild.name}, status: ${connection.state.status}`);
+      if (connection.state.status !== VoiceConnectionStatus.Ready) {
+        // Connection exists but not ready - wait for it
+        await new Promise((resolve, reject) => {
+          if (connection.state.status === VoiceConnectionStatus.Ready) {
+            resolve(true);
+            return;
+          }
+          const timeout = setTimeout(() => {
+            reject(new Error("Voice connection timeout"));
+          }, 10000);
+
+          connection.on(VoiceConnectionStatus.Ready, () => {
+            clearTimeout(timeout);
+            resolve(true);
+          });
+
+          connection.on(VoiceConnectionStatus.Disconnected, () => {
+            clearTimeout(timeout);
+            reject(new Error("Voice connection disconnected"));
+          });
+        }).catch((err) => {
+          logFunc(`❌ Voice connection failed in ${guild.name}: ${err.message}`, "error");
+          return false;
+        });
+      }
     }
 
     let player = guildPlayers.get(guild.id);
@@ -122,6 +183,8 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
         console.log(`[VoiceService] Creating audio resource from play-dl stream in ${guild.name}`);
       } else {
         console.log(`[VoiceService] Creating audio resource from URL: ${audioUrl.substring(0, 100)}... in ${guild.name}`);
+        // For HTTP URLs, ensure we pass them correctly
+        resourceOptions.inputType = StreamType.Arbitrary;
       }
 
       resource = createAudioResource(audioUrl as any, resourceOptions);
@@ -138,8 +201,9 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
     }
     guildResources.set(guild.id, resource);
 
-    player.play(resource);
+    // Subscribe player to connection BEFORE playing
     connection.subscribe(player);
+    player.play(resource);
     
     logFunc(`🎵 Connected to Voice Channel '${targetChannel.name}' and playing audio stream.`, "success");
     return true;
