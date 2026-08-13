@@ -1719,14 +1719,19 @@ safeSetInterval(() => {
 }, 300000); // Every 5 minutes
 
 export async function startDiscordBot() {
+  console.log("[BOT-STARTUP] startDiscordBot() invoked");
   try {
     validateEnvironmentVariables();
+    console.log("[BOT-STARTUP] Environment validation passed");
   } catch (e: any) {
-    console.error("[startDiscordBot] Critical Environment validation error:", e?.message || e);
-    // process.exit(1);
+    console.error("[BOT-STARTUP] Critical Environment validation error:", e?.message || e);
+    botStatus = "offline";
+    isStartingBot = false;
+    return;
   }
 
   const token = (process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN)?.trim();
+  console.log("[BOT-STARTUP] Token present:", !!token, "length:", token?.length);
   if (token) TokenVault.store(token, "DISCORD_TOKEN");
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) TokenVault.store(geminiKey, "GEMINI_API_KEY");
@@ -1746,6 +1751,7 @@ export async function startDiscordBot() {
   if (!token || token.length < 50 || token.includes("placeholder") || token.includes("your_token") || token.includes("token_here")) {
     addBotLog("DISCORD_BOT_TOKEN is not configured or invalid. Bot is offline.", "warning");
     botStatus = "offline";
+    isStartingBot = false;
     return;
   }
 
@@ -1759,6 +1765,7 @@ export async function startDiscordBot() {
   botStatus = "connecting";
 
   try {
+    console.log("[BOT-STARTUP] Creating Discord Client with intents...");
     const client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -1851,6 +1858,7 @@ function startPresenceRotator(client: Client) {
 }
 
 client.on("ready", async () => {
+    console.log("[BOT-READY] ready event fired");
     // Clear any previous running intervals to prevent leaks on reconnect
     activeIntervals.forEach(clearInterval);
     activeIntervals = [];
@@ -1982,6 +1990,7 @@ client.on("ready", async () => {
     }, 5 * 60 * 1000); // Run every 5 minutes
 
       botStatus = "online";
+      console.log("[BOT-READY] botStatus set to online");
       const user = client.user;
       if (user) {
         botUser = {
@@ -1995,11 +2004,14 @@ client.on("ready", async () => {
         user.setPresence({
           activities: [{ name: "🛡️ Anti-Chomu Activated", type: ActivityType.Watching }],
           status: "online"
+        }).catch((presenceErr) => {
+          console.error("[BOT-READY] setPresence failed:", presenceErr);
         });
       }
 
       // Fetch connected guilds
       try {
+        console.log("[BOT-READY] Fetching guilds...");
         const guilds = await client.guilds.fetch();
         botGuilds = await Promise.all(
           guilds.map(async (g) => {
@@ -2068,6 +2080,7 @@ client.on("ready", async () => {
             };
           })
         );
+        console.log("[BOT-READY] Guild fetch complete, count:", botGuilds.length);
         addBotLog(`Guarding ${botGuilds.length} server(s) with 100/100 Zero Trust Security.`, "info");
       } catch (gErr: any) {
         addBotLog(`Failed to load server lists: ${gErr.message}`, "warning");
@@ -2075,6 +2088,7 @@ client.on("ready", async () => {
 
       // Register Slash Commands Cleanly (Guild-level for instant sync, clear global duplicates)
       try {
+        console.log("[BOT-READY] Registering slash commands...");
         const commands = [
           {
             name: "analyze",
@@ -5981,6 +5995,7 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
     });
 
     const tokenToLogin = (TokenVault.retrieve() || process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN)?.trim();
+    console.log("[BOT-STARTUP] Token to login present:", !!tokenToLogin, "length:", tokenToLogin?.length);
     if (tokenToLogin && CanaryToken.check(tokenToLogin)) {
       addBotLog("🚨 [CANARY TRAP TRIGGERED] CRITICAL SECURITY BREACH! Decoy Canary Token was used to log in. Immediate Zero Trust memory wipe self-destruct activated.", "error");
       console.error("🚨 [CANARY BREACH DETECTED] Decoy Canary Token used in bot login.");
@@ -5995,10 +6010,17 @@ Your Goal: Server 100% safe + Members active + Owner's income increased.`;
       isStartingBot = false;
       return;
     }
-    console.log("Attempting Discord bot login..."); await client.login(tokenToLogin);
+    console.log("[BOT-STARTUP] Attempting Discord bot login...");
+    const loginPromise = client.login(tokenToLogin);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Login timeout: ready event did not fire within 30s")), 30000)
+    );
+    await Promise.race([loginPromise, timeoutPromise]);
+    console.log("[BOT-STARTUP] client.login() resolved without throwing");
     isStartingBot = false;
   } catch (err: any) {
     const errMsg = err?.message || String(err);
+    console.error("[BOT-STARTUP] Caught error:", errMsg);
     if (errMsg.includes("TokenInvalid") || errMsg.includes("invalid token") || errMsg.includes("An invalid token was provided")) {
       addBotLog(`Discord Bot offline: Invalid token provided. Please configure a valid Discord Bot Token.`, "warning");
     } else {
