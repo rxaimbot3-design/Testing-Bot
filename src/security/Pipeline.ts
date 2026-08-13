@@ -30,6 +30,7 @@ export class SecurityPipeline {
   private static decisionLog: DecisionRecord[] = [];
   private static readonly MAX_DECISION_LOG = 500;
   private static lockdownMode = false;
+  private static recentQuarantines = new TtlMap<string, number>({ ttlMs: 60000, maxEntries: 10000, autoCleanupMs: 30000 });
 
   private static thresholds = {
     massChannelCreate: { count: 5, windowMs: 10000 },
@@ -107,6 +108,11 @@ export class SecurityPipeline {
       canRollback: adjustedScore >= 50
     };
 
+    // Track quarantine for future false-positive damping
+    if (result.action === "quarantine" || result.action === "lockdown") {
+      this.recentQuarantines.set(event.userId, Date.now());
+    }
+
     this.logDecision(event, result);
     return result;
   }
@@ -180,10 +186,7 @@ export class SecurityPipeline {
 
   private static adjustForFalsePositive(userId: string, score: number): number {
     // If user was recently quarantined and released, apply false-positive damping
-    const recent = this.decisionLog
-      .filter(d => d.event.userId === userId && d.result.action === "quarantine")
-      .filter(d => Date.now() - d.timestamp < 60000);
-    if (recent.length > 0) {
+    if (this.recentQuarantines.has(userId)) {
       return Math.max(0, score - 20);
     }
     return score;
@@ -241,5 +244,6 @@ export class SecurityPipeline {
     this.duplicatePayloadTracker.clear();
     this.decisionLog.length = 0;
     this.lockdownMode = false;
+    this.recentQuarantines.clear();
   }
 }
