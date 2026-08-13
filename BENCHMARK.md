@@ -72,7 +72,8 @@ curl -X POST http://localhost:3000/api/cpp-engine/scan \
 | Metric | Target | Typical |
 |--------|--------|---------|
 | Single scan latency | < 1ms | 0.3-0.8ms |
-| Batch throughput | > 10k ops/sec | 15-25k ops/sec |
+| Batch throughput | > 100k events/sec | 100k-150k events/sec |
+| Batch calls/sec | > 10 calls/sec | 10-20 calls/sec |
 | Memory usage | < 50MB | 20-40MB |
 | Hash latency (SHA-256) | < 1ms | 0.2-0.5ms |
 | Hash latency (CRC-32) | < 0.5ms | 0.1-0.3ms |
@@ -100,9 +101,11 @@ curl -X POST http://localhost:3000/api/cpp-engine/scan \
 
 ### Throughput
 - **API**: 1000+ requests/second with rate limiting
-- **Events**: 10,000+ events/second processing capacity
+- **Events**: 100,000+ events/second processing capacity (native C++ engine)
 - **Discord Gateway**: 50+ shards supported
-- **C++ Engine**: 15,000-25,000 scans/second
+- **C++ Engine**: 100,000-150,000 scans/second (single-threaded, native)
+- **C++ Batch**: 1-20 batch calls/second processing 1K-100K events each
+- **C++ Batch Events**: 130K-500K events/second across batch sizes
 
 ### Latency
 
@@ -265,15 +268,19 @@ curl -X POST http://localhost:3000/api/debug/heap-snapshot \
 ## Benchmark Results Template
 
 ```
-=== Benchmark Run: 2026-08-12 ===
-Environment: Node.js 20.x, 4 CPU, 8GB RAM
+=== Benchmark Run: 2026-08-13 ===
+Environment: Node.js 22.x, 4 CPU, 8GB RAM
 
 C++ Engine:
-  - Scan latency (p50): 0.4ms
-  - Scan latency (p95): 0.8ms
-  - Scan latency (p99): 1.2ms
-  - Throughput: 22,000 ops/sec
-  - Memory: 32MB
+  - scanPacket throughput: 100,000-140,000 ops/sec
+  - scanBatch (1K): ~167 batch calls/sec, ~166K events/sec
+  - scanBatch (10K): ~14 batch calls/sec, ~135K events/sec
+  - scanBatch (100K): ~1 batch call/sec, ~133K events/sec
+  - Burst (50K): ~4,000-5,000 events/sec, ~230-350us avg latency
+  - Memory: 25-90MB depending on batch size
+  - SHA-256 batch: ~250K events/sec
+  - SHA-512 batch: ~140K events/sec
+  - CRC-32 batch: ~500K events/sec
 
 API:
   - Health check (p50): 2ms

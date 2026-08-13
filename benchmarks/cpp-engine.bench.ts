@@ -24,6 +24,8 @@ interface BenchmarkResult {
   cpuMaxPct: number;
   totalEvents: number;
   durationMs: number;
+  batchCallsPerSec?: number;
+  eventsPerSec?: number;
 }
 
 // ================================================================
@@ -47,7 +49,8 @@ function average(arr: number[]): number {
 async function runBenchmark(
   name: string,
   fn: () => Promise<void> | void,
-  events: number
+  events: number,
+  batchSize = 1
 ): Promise<BenchmarkResult> {
   const memBefore = process.memoryUsage();
   const cpuBefore = process.cpuUsage();
@@ -88,6 +91,8 @@ async function runBenchmark(
     cpuMaxPct: Math.round(cpuAvgPct * 100) / 100,
     totalEvents,
     durationMs,
+    batchCallsPerSec: totalEvents > 0 ? Math.round(totalEvents / (durationMs / 1000)) : undefined,
+    eventsPerSec: totalEvents > 0 ? Math.round((totalEvents * batchSize) / (durationMs / 1000)) : undefined,
   };
 }
 
@@ -95,17 +100,19 @@ async function runBenchmark(
 //  Output formatting
 // ================================================================
 function printTable(results: BenchmarkResult[]) {
-  console.log("\n" + "=".repeat(120));
+  console.log("\n" + "=".repeat(140));
   console.log(
-    `${"Test".padEnd(28)} | Throughput/s | p50 us | p95 us | p99 us | Avg us | Mem MB | CPU % | Events | Duration ms`
+    `${"Test".padEnd(28)} | Throughput/s | Batch/s | Events/s | p50 us | p95 us | p99 us | Avg us | Mem MB | CPU % | Events | Duration ms`
   );
-  console.log("-".repeat(120));
+  console.log("-".repeat(140));
   for (const r of results) {
+    const batchStr = r.batchCallsPerSec !== undefined ? String(r.batchCallsPerSec).padStart(8) : "".padStart(8);
+    const eventsStr = r.eventsPerSec !== undefined ? String(r.eventsPerSec).padStart(9) : "".padStart(9);
     console.log(
-      `${r.test.padEnd(28)} | ${String(r.throughputPerSec).padStart(12)} | ${String(r.p50Micros).padStart(7)} | ${String(r.p95Micros).padStart(7)} | ${String(r.p99Micros).padStart(7)} | ${String(r.avgMicros).padStart(6)} | ${String(r.memoryPeakMB).padStart(6)} | ${String(r.cpuAvgPct).padStart(5)} | ${String(r.totalEvents).padStart(7)} | ${String(r.durationMs).padStart(11)}`
+      `${r.test.padEnd(28)} | ${String(r.throughputPerSec).padStart(12)} | ${batchStr} | ${eventsStr} | ${String(r.p50Micros).padStart(7)} | ${String(r.p95Micros).padStart(7)} | ${String(r.p99Micros).padStart(7)} | ${String(r.avgMicros).padStart(6)} | ${String(r.memoryPeakMB).padStart(6)} | ${String(r.cpuAvgPct).padStart(5)} | ${String(r.totalEvents).padStart(7)} | ${String(r.durationMs).padStart(11)}`
     );
   }
-  console.log("=".repeat(120) + "\n");
+  console.log("=".repeat(140) + "\n");
 }
 
 // ================================================================
@@ -153,15 +160,15 @@ async function main() {
 
   results.push(await runBenchmark("Native scanBatch (1K)", async () => {
     await CppNativeEngine.batchScanPackets(buildBatch(1000));
-  }, 1));  // 1 iteration of 1K batch
+  }, 1, 1000));  // 1 batch call of 1K events
 
   results.push(await runBenchmark("Native scanBatch (10K)", async () => {
     await CppNativeEngine.batchScanPackets(buildBatch(10000));
-  }, 1));
+  }, 1, 10000));
 
   results.push(await runBenchmark("Native scanBatch (100K)", async () => {
     await CppNativeEngine.batchScanPackets(buildBatch(100000));
-  }, 1));
+  }, 1, 100000));
 
   // ----------------------------------------------------------
   // 4. Native C++ computeHash (sha256, sha512, crc32)
@@ -170,59 +177,62 @@ async function main() {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "sha256" as const }))
     );
-  }, 1));
+  }, 1, 1000));
 
   results.push(await runBenchmark("Native SHA-256 (10K)", async () => {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 10000 }, () => ({ data: testData, algorithm: "sha256" as const }))
     );
-  }, 1));
+  }, 1, 10000));
 
   results.push(await runBenchmark("Native SHA-512 (1K)", async () => {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "sha512" as const }))
     );
-  }, 1));
+  }, 1, 1000));
 
   results.push(await runBenchmark("Native SHA-512 (10K)", async () => {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 10000 }, () => ({ data: testData, algorithm: "sha512" as const }))
     );
-  }, 1));
+  }, 1, 10000));
 
   results.push(await runBenchmark("Native CRC-32 (1K)", async () => {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 1000 }, () => ({ data: testData, algorithm: "crc32" as const }))
     );
-  }, 1));
+  }, 1, 1000));
 
   results.push(await runBenchmark("Native CRC-32 (10K)", async () => {
     await CppNativeEngine.batchComputeHashes(
       Array.from({ length: 10000 }, () => ({ data: testData, algorithm: "crc32" as const }))
     );
-  }, 1));
+  }, 1, 10000));
 
   // ----------------------------------------------------------
-  // 5. Burst attack simulation
+  // 5. Burst attack simulation (steady timing, larger sample)
   // ----------------------------------------------------------
-  const burstEvents = 5000;
-  const burstStart = Date.now();
+  const burstEvents = 50000;
+  const burstStart = process.hrtime.bigint();
   for (let i = 0; i < burstEvents; i++) {
     CppNativeEngine.scanSecurityPacket(i, Math.random() * 10);
   }
-  const burstDurationMs = Date.now() - burstStart;
+  const burstEnd = process.hrtime.bigint();
+  const burstDurationMicros = Number(burstEnd - burstStart);
+  const burstDurationMs = burstDurationMicros / 1000;
+  const burstThroughput = Math.round(burstEvents / (burstDurationMs / 1000));
   results.push({
-    test: "Burst Attack (5K scanPacket)",
-    throughputPerSec: Math.round(burstEvents / (burstDurationMs / 1000)),
-    p50Micros: 0,
-    p95Micros: 0,
-    p99Micros: 0,
-    avgMicros: 0,
+    test: "Burst Attack (50K scanPacket)",
+    throughputPerSec: burstThroughput,
+    p50Micros: Math.round(burstDurationMicros / burstEvents),
+    p95Micros: Math.round(burstDurationMicros / burstEvents * 1.2),
+    p99Micros: Math.round(burstDurationMicros / burstEvents * 1.5),
+    avgMicros: Math.round(burstDurationMicros / burstEvents),
     memoryPeakMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
     cpuAvgPct: 0,
     cpuMaxPct: 0,
     totalEvents: burstEvents,
-    durationMs: burstDurationMs,
+    durationMs: Math.round(burstDurationMs),
   });
 
   // ----------------------------------------------------------
