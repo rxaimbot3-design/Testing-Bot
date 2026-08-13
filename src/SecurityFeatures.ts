@@ -90,7 +90,7 @@ export function runMemoryMonitoring(): void {
 
 // 1. Token Vault - Encrypts the token in memory with AES-256-GCM & Disk Persistence
 export class TokenVault {
-  private static encryptedTokens: Map<string, { encrypted: string; iv: string; authTag: string }> = new Map();
+  private static encryptedTokens = new LruMap<string, { encrypted: string; iv: string; authTag: string }>(100);
   private static masterSecret = process.env.ADMIN_SECRET || crypto.randomBytes(32).toString("hex");
   private static isCompromised = false;
   private static vaultFile = path.join(process.cwd(), "vault_tokens.json");
