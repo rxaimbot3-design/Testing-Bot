@@ -35,8 +35,13 @@ export class AuditLogQueue {
     this.maxQueueSize = options.maxQueueSize || 10000;
     this.maxLogSize = options.maxLogSize || 10 * 1024 * 1024;
 
-    if (!fs.existsSync(this.logDir)) {
-      fs.mkdirSync(this.logDir, { recursive: true });
+    try {
+      if (!fs.existsSync(this.logDir)) {
+        fs.mkdirSync(this.logDir, { recursive: true });
+      }
+    } catch (err) {
+      console.warn(`[AUDIT LOG] Cannot create log directory '${this.logDir}':`, (err as Error).message);
+      this.logDir = "";
     }
     this.currentLogFile = this.getLogFilePath();
   }
@@ -78,6 +83,7 @@ export class AuditLogQueue {
   }
 
   private writeBatch(batch: AuditEvent[]): void {
+    if (!this.logDir) return;
     try {
       this.rotateLogIfNeeded();
 
@@ -98,12 +104,13 @@ export class AuditLogQueue {
   }
 
   private getLogFilePath(): string {
+    if (!this.logDir) return "";
     const date = new Date().toISOString().slice(0, 10);
     return path.join(this.logDir, `audit_${date}.json`);
   }
 
   private rotateLogIfNeeded(): void {
-    if (this.currentLogSize >= this.maxLogSize) {
+    if (!this.logDir || this.currentLogSize >= this.maxLogSize) {
       this.currentLogFile = this.getLogFilePath();
       this.currentLogSize = 0;
     }
