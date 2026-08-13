@@ -67,8 +67,8 @@ COPY --from=builder --chown=appuser:appuser /app/public ./public
 COPY --from=builder --chown=appuser:appuser /app/node_modules ./node_modules
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /app/data /app/backups /app/snapshots /app/logs && \
-    chown -R appuser:appuser /app/data /app/backups /app/snapshots /app/logs
+RUN mkdir -p /app/data /app/backups /app/snapshots /app/logs /app/audit_logs && \
+    chown -R appuser:appuser /app/data /app/backups /app/snapshots /app/logs /app/audit_logs
 
 # Switch to non-root user
 USER appuser
