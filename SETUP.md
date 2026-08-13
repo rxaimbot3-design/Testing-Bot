@@ -1,6 +1,6 @@
 # 🛡️ Ultimate Discord AI Bot - Enterprise Installation & Setup Guide
 
-Welcome to the **Ultimate Discord AI Bot** setup guide. This enterprise-grade Discord bot features military-grade **Zero Trust Anti-Nuke Shield**, **Real-Time AI Auto-Moderation (powered by Google Gemini)**, **C++ Native High-Frequency Security Engine**, and a **Live Interactive Web Control Dashboard**.
+Welcome to the **Ultimate Discord AI Bot** setup guide. This enterprise-grade Discord bot features **Zero Trust Anti-Nuke Shield**, **Real-Time AI Auto-Moderation (powered by Google Gemini)**, **C++ Native High-Frequency Security Engine**, and a **Live Interactive Web Control Dashboard**.
 
 ---
 

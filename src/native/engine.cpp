@@ -153,14 +153,11 @@ namespace {
 
   // ============================================================
   //  SIMD detection (compile-time)
+  //  NOTE: Actual SIMD intrinsics are NOT used in current code paths.
+  //  This flag remains false until AVX2/SSE4.2 instructions are
+  //  explicitly used in hashing or detection loops.
   // ============================================================
-#if defined(__AVX2__)
-  constexpr bool kSimdAvailable = true;
-#elif defined(__SSE4_2__)
-  constexpr bool kSimdAvailable = true;
-#else
   constexpr bool kSimdAvailable = false;
-#endif
 
   // ============================================================
   //  Helper: pack 4 x 32-bit fields into a 128-bit-ish string for hashing
@@ -324,10 +321,9 @@ private:
 
   // ---- Rule engine ----
   static DetectionEvent ParseEvent(double risk_weight,
-                                   uint32_t packet_id,
-                                   const Napi::Object& obj);
+                                    uint32_t packet_id,
+                                    const Napi::Object& obj);
   static std::pair<double, std::string> EvaluateRule(const DetectionEvent& ev);
-  static std::string Decision(double score);
 
   MemoryArena      arena_;
   std::atomic<uint64_t> audit_counter_{0};
@@ -443,11 +439,24 @@ std::pair<double, std::string> SecurityEngine::EvaluateRule(const DetectionEvent
 // ================================================================
 //  Decision matrix
 // ================================================================
-std::string SecurityEngine::Decision(double score) {
-  if (score >= 80.0) return "LOCKDOWN";
-  if (score >= 50.0) return "QUARANTINE";
-  if (score >= 25.0) return "MONITOR";
-  return "ALLOW";
+enum class Decision : uint32_t {
+  kPass   = 0,
+  kFlag   = 1,
+  kBlock  = 2
+};
+
+inline Decision MakeDecision(double score) {
+  if (score >= 50.0) return Decision::kBlock;
+  if (score >= 25.0) return Decision::kFlag;
+  return Decision::kPass;
+}
+
+inline const char* DecisionToString(Decision d) {
+  switch (d) {
+    case Decision::kBlock: return "BLOCK";
+    case Decision::kFlag:  return "FLAG";
+    default:              return "PASS";
+  }
 }
 
 // ================================================================
@@ -528,19 +537,21 @@ Napi::Value SecurityEngine::ScanPacket(const Napi::CallbackInfo& info) {
   if (risk_weight > 1000.0) risk_weight = 1000.0;
 
   double score = ruleScore;
-  std::string action;
+  Decision decision;
   if (ruleScore < 1.0) {
-    // No specific rule triggered; use riskWeight for simple scoring
-    score = std::max(0.0, 100.0 - risk_weight * 10.0);
-    action = score >= 80.0 ? "ALLOW" : (score >= 50.0 ? "MONITOR" : (score >= 25.0 ? "QUARANTINE" : "LOCKDOWN"));
+    // No specific rule triggered; derive score directly from riskWeight
+    score = std::min(100.0, risk_weight / 10.0);
+    decision = MakeDecision(score);
   } else {
     // Rule triggered; blend in riskWeight as amplification
     score += risk_weight * 0.5;
     if (score > 100.0) score = 100.0;
-    action = Decision(score);
+    decision = MakeDecision(score);
   }
 
   // Real checksum: SHA-256 of packed event fields (deterministic)
+  // Uses audited OpenSSL EVP implementation for SHA-256.
+  // CRC-32 is only used as a last-resort fallback if EVP fails.
   std::string packed = PackEvent(ev);
   std::string checksum = EvpHex(EVP_sha256(), packed);
   if (checksum.empty()) checksum = Crc32Hex(packed);
@@ -560,12 +571,12 @@ Napi::Value SecurityEngine::ScanPacket(const Napi::CallbackInfo& info) {
   audit_counter_.fetch_add(1, std::memory_order_relaxed);
 
   Napi::Object result = Napi::Object::New(info.Env());
-  result.Set("passed",        true);
+  result.Set("passed",        decision != Decision::kBlock);
   result.Set("latencyMicros", micros);
   result.Set("score",         score);
   result.Set("checksum",      Napi::String::New(info.Env(), checksum));
   result.Set("rule",          Napi::String::New(info.Env(), rule));
-  result.Set("action",        Napi::String::New(info.Env(), action));
+  result.Set("action",        Napi::String::New(info.Env(), DecisionToString(decision)));
   return result;
 }
 
@@ -639,14 +650,14 @@ Napi::Value SecurityEngine::ScanBatch(const Napi::CallbackInfo& info) {
     if (risk_weight > 1000.0) risk_weight = 1000.0;
 
     double score = ruleScore;
-    std::string action;
+    Decision decision;
     if (ruleScore < 1.0) {
       score = std::max(0.0, 100.0 - risk_weight * 10.0);
-      action = score >= 80.0 ? "ALLOW" : (score >= 50.0 ? "MONITOR" : (score >= 25.0 ? "QUARANTINE" : "LOCKDOWN"));
+      decision = MakeDecision(score);
     } else {
       score += risk_weight * 0.5;
       if (score > 100.0) score = 100.0;
-      action = Decision(score);
+      decision = MakeDecision(score);
     }
 
     std::string packed = PackEvent(ev);
@@ -667,12 +678,12 @@ Napi::Value SecurityEngine::ScanBatch(const Napi::CallbackInfo& info) {
     audit_counter_.fetch_add(1, std::memory_order_relaxed);
 
     Napi::Object res = Napi::Object::New(info.Env());
-    res.Set("passed",        true);
+    res.Set("passed",        decision != Decision::kBlock);
     res.Set("latencyMicros", micros);
     res.Set("score",         score);
     res.Set("checksum",      Napi::String::New(info.Env(), checksum));
     res.Set("rule",          Napi::String::New(info.Env(), rule));
-    res.Set("action",        Napi::String::New(info.Env(), action));
+    res.Set("action",        Napi::String::New(info.Env(), DecisionToString(decision)));
     results[i] = res;
   }
 

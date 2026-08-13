@@ -35,6 +35,7 @@ export class SecurityPipeline {
     massChannelCreate: { count: 5, windowMs: 10000 },
     massRoleModify: { count: 3, windowMs: 10000 },
     permissionEscalation: { count: 1, windowMs: 60000 },
+    massBanKick: { count: 5, windowMs: 10000 },
     burst: { count: 10, windowMs: 5000 },
   };
 
@@ -123,6 +124,10 @@ export class SecurityPipeline {
         score += this.checkBurst(key, history, now, this.thresholds.massChannelCreate) * 40;
         if (score > 0) rule = "mass_channel_create";
         break;
+      case "channel_delete":
+        score += this.checkBurst(key, history, now, { count: 3, windowMs: 10000 }) * 40;
+        if (score > 0) rule = "mass_channel_delete";
+        break;
       case "role_create":
       case "role_update":
         score += this.checkBurst(key, history, now, this.thresholds.massRoleModify) * 50;
@@ -138,8 +143,8 @@ export class SecurityPipeline {
         break;
       case "guild_kick":
       case "guild_ban":
-        score += 20;
-        rule = "mass_ban_kick";
+        score += this.checkBurst(key, history, now, this.thresholds.massBanKick) * 50;
+        if (score > 0) rule = "mass_ban_kick";
         break;
       case "webhook_create":
       case "webhook_update":

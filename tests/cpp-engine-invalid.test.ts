@@ -33,12 +33,14 @@ describe("CppEngine: Invalid Input Tests", () => {
 
   it("handles extremely large riskWeight clamping", () => {
     const result = CppNativeEngine.scanSecurityPacket(1, 999999);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(100);
+    expect(result.passed).toBe(false);
   });
 
   it("handles extremely negative riskWeight clamping", () => {
     const result = CppNativeEngine.scanSecurityPacket(1, -999999);
-    expect(result.score).toBe(100);
+    expect(result.score).toBe(0);
+    expect(result.passed).toBe(true);
   });
 
   it("handles empty batch", async () => {

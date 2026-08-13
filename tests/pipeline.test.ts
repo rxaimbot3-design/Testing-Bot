@@ -182,3 +182,150 @@ describe("Security Pipeline: Threshold Behavior", () => {
     expect(results.every((r) => !r.blocked)).toBe(true);
   });
 });
+
+describe("Security Pipeline: Attack Simulations", () => {
+  beforeEach(() => {
+    SecurityPipeline.reset();
+  });
+
+  it("detects and blocks mass channel deletion raid", () => {
+    const now = Date.now();
+    const events = Array.from({ length: 15 }, (_, i) => ({
+      type: "channel_delete" as const,
+      userId: "nuker_1",
+      guildId: "guild_1",
+      timestamp: now + i * 100,
+      payload: { massAction: true },
+    }));
+    const results = SecurityPipeline.processBatch(events);
+    const blocked = results.filter((r) => r.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(1);
+    expect(blocked[0].rule).toBe("mass_channel_delete");
+  });
+
+  it("detects and blocks mass role change raid", () => {
+    const now = Date.now();
+    const events = Array.from({ length: 10 }, (_, i) => ({
+      type: "role_update" as const,
+      userId: "nuker_2",
+      guildId: "guild_2",
+      timestamp: now + i * 100,
+      payload: { massAction: true },
+    }));
+    const results = SecurityPipeline.processBatch(events);
+    const blocked = results.filter((r) => r.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(1);
+    expect(blocked[0].rule).toBe("mass_role_update");
+  });
+
+  it("detects and blocks mass ban/kick raid", () => {
+    const now = Date.now();
+    const events: SecurityEvent[] = [
+      ...Array.from({ length: 8 }, (_, i) => ({
+        type: "guild_ban" as const,
+        userId: "nuker_3",
+        guildId: "guild_3",
+        timestamp: now + i * 100,
+        payload: {},
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        type: "guild_kick" as const,
+        userId: "nuker_3",
+        guildId: "guild_3",
+        timestamp: now + (i + 8) * 100,
+        payload: {},
+      })),
+    ];
+    const results = SecurityPipeline.processBatch(events);
+    const blocked = results.filter((r) => r.blocked);
+    expect(blocked.length).toBeGreaterThanOrEqual(1);
+    expect(blocked[0].rule).toBe("mass_ban_kick");
+  });
+
+  it("detects permission escalation attack", () => {
+    const event: SecurityEvent = {
+      type: "permission_update",
+      userId: "attacker_1",
+      guildId: "guild_4",
+      timestamp: Date.now(),
+      payload: { role: "admin", permissions: "administrator" },
+    };
+    const result = SecurityPipeline.processEvent(event);
+    expect(result.score).toBeGreaterThanOrEqual(40);
+    expect(result.rule).toBe("permission_escalation");
+  });
+
+  it("detects webhook abuse", () => {
+    const now = Date.now();
+    const events = Array.from({ length: 5 }, (_, i) => ({
+      type: "webhook_create" as const,
+      userId: "spammer_1",
+      guildId: "guild_5",
+      timestamp: now + i * 100,
+      payload: {},
+    }));
+    const results = SecurityPipeline.processBatch(events);
+    const flagged = results.filter((r) => r.score >= 30);
+    expect(flagged.length).toBeGreaterThanOrEqual(1);
+    expect(flagged[0].rule).toBe("webhook_abuse");
+  });
+
+  it("detects bot addition flood", () => {
+    const now = Date.now();
+    const events = Array.from({ length: 8 }, (_, i) => ({
+      type: "guild_member_add" as const,
+      userId: "bot_farmer_1",
+      guildId: "guild_6",
+      timestamp: now + i * 100,
+      payload: { bot: true },
+    }));
+    const results = SecurityPipeline.processBatch(events);
+    const flagged = results.filter((r) => r.score >= 30);
+    expect(flagged.length).toBeGreaterThanOrEqual(1);
+    expect(flagged[0].rule).toBe("bot_addition");
+  });
+
+  it("allows trusted users during raid simulation", () => {
+    SecurityPipeline.addTrustedUser("trusted_admin");
+    const now = Date.now();
+    const events = Array.from({ length: 20 }, (_, i) => ({
+      type: "channel_delete" as const,
+      userId: "trusted_admin",
+      guildId: "guild_7",
+      timestamp: now + i * 100,
+      payload: {},
+    }));
+    const results = SecurityPipeline.processBatch(events);
+    expect(results.every((r) => r.action === "allow_trusted")).toBe(true);
+  });
+
+  it("supports emergency lockdown mode", () => {
+    SecurityPipeline.setLockdownMode(true);
+    const event: SecurityEvent = {
+      type: "message_create",
+      userId: "random_user",
+      guildId: "guild_8",
+      timestamp: Date.now(),
+      payload: {},
+    };
+    const result = SecurityPipeline.processEvent(event);
+    expect(result.blocked).toBe(true);
+    expect(result.action).toBe("lockdown");
+    expect(result.score).toBe(100);
+    expect(result.rule).toBe("emergency_lockdown");
+  });
+
+  it("supports rollback of last decision", () => {
+    const events = Array.from({ length: 6 }, (_, i) => ({
+      type: "channel_create" as const,
+      userId: "user_1",
+      guildId: "guild_9",
+      timestamp: Date.now() + i * 100,
+      payload: { massAction: true },
+    }));
+    SecurityPipeline.processBatch(events);
+    const rollback = SecurityPipeline.rollbackLast("user_1", "guild_9");
+    expect(rollback).not.toBeNull();
+    expect(rollback?.action).toBe("rollback");
+  });
+});
