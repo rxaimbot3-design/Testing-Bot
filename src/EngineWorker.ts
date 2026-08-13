@@ -122,7 +122,7 @@ class EngineWorkerCore {
       memoryUsedMB: parseFloat(((memUsage.heapUsed + (memUsage.arrayBuffers || 0)) / 1024 / 1024).toFixed(2)),
       averageLatencyMicroseconds: this.lastLatencyMicros,
       throughputPerSecond: calculatedThroughput,
-      simdAcceleration: true,
+      simdAcceleration: false,
       activeThreads: cpus.length || 1,
       totalAuditsProcessed: this.auditCounter
     };

@@ -6,10 +6,9 @@ The C++ Native Engine (`security_engine`) provides high-performance security ope
 
 **Key Features:**
 - Microsecond-precision packet scanning
-- Cryptographic hash computation (SHA-256, SHA-512, CRC-32)
+- OpenSSL EVP cryptographic hash computation (SHA-256, SHA-512, CRC-32 fallback)
 - Lock-free latency tracking with percentile calculation
-- SIMD-accelerated operations on x86_64 (AVX2)
-- 16 MiB arena allocator for zero-fragmentation memory management
+- Cache-line-aligned arena allocator for zero-fragmentation memory management
 
 ## Build System
 
@@ -141,7 +140,7 @@ Returns current engine metrics.
   "p95LatencyMicroseconds": 0.8,
   "p99LatencyMicroseconds": 1.2,
   "throughputPerSecond": 25000,
-  "simdAcceleration": true,
+  "simdAcceleration": false,
   "activeThreads": 4,
   "totalAuditsProcessed": 150000,
   "latencySampleCount": 150000
@@ -332,19 +331,14 @@ if (nativeInstance) {
 | Hash latency | < 1ms | 1-3ms | 3-10ms |
 | Throughput | > 20k ops/s | 5-15k ops/s | 1-5k ops/s |
 
-## SIMD Acceleration
+## Decision Engine
 
-On x86_64 platforms with AVX2 support:
-- Vectorized CRC-32 computation
-- Parallel hash updates
-- Optimized memory copies
+The native engine implements a deterministic PASS/FLAG/BLOCK decision layer:
+- `score < 25.0` → `PASS`
+- `25.0 ≤ score < 50.0` → `FLAG`
+- `score ≥ 50.0` → `BLOCK`
 
-```cpp
-#if defined(__x86_64__) || defined(_M_X64)
-#include <immintrin.h>
-// AVX2 intrinsics available
-#endif
-```
+Risk scoring blends rule-based detection with configurable `riskWeight` amplification.
 
 ## Thread Safety
 

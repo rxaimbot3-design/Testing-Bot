@@ -302,11 +302,11 @@ sequenceDiagram
 │  │             │  │ - CRC-32     │  │ - O(1) reset           │ │
 │  └─────────────┘  └──────────────┘  └────────────────────────┘ │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
-│  │ Metrics     │  │ Latency      │  │ SIMD                   │ │
-│  │ Collector   │  │ Tracker      │  │ Acceleration           │ │
-│  │             │  │              │  │ (x86_64 AVX2)          │ │
-│  │ - Atomic    │  │ - Ring buf   │  │                        │ │
-│  │ - Throughput│  │ - Percentile │  │                        │ │
+│  │ Metrics     │  │ Latency      │  │ Decision                │ │
+│  │ Collector   │  │ Tracker      │  │ Engine                  │ │
+│  │             │  │              │  │ (PASS/FLAG/BLOCK)       │ │
+│  │ - Atomic    │  │ - Ring buf   │  │ - Risk scoring          │ │
+│  │ - Throughput│  │ - Percentile │  │ - Threshold rules       │ │
 │  └─────────────┘  └──────────────┘  └────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                               │
