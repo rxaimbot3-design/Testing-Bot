@@ -189,6 +189,18 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
 
       resource = createAudioResource(audioUrl as any, resourceOptions);
       console.log(`[VoiceService] Audio resource created successfully in ${guild.name}`);
+      console.log(`[VoiceService] Resource type: ${resource.type || 'unknown'}, duration: ${resource.duration || 'unknown'}`);
+      
+      // Add stream error listener
+      resource.on('error', (err: any) => {
+        console.error(`[VoiceService] Audio resource stream error in ${guild.name}:`, err);
+        logFunc(`❌ Audio stream error: ${err?.message || err}`, "error");
+      });
+      
+      // Log when stream starts playing
+      resource.on('start', () => {
+        console.log(`[VoiceService] Audio stream started playing in ${guild.name}`);
+      });
     } catch (resourceErr: any) {
       console.error("Failed to create audio resource:", resourceErr);
       logFunc(`❌ Failed to load audio stream: ${resourceErr.message}. The stream may be invalid or incompatible.`, "error");
@@ -204,6 +216,9 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
     // Subscribe player to connection BEFORE playing
     connection.subscribe(player);
     player.play(resource);
+    
+    // Add a small delay to ensure subscription takes effect
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     logFunc(`🎵 Connected to Voice Channel '${targetChannel.name}' and playing audio stream.`, "success");
     return true;
