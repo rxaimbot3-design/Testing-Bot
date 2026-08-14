@@ -211,7 +211,7 @@ class WorkerEngine {
       if (isDev) {
         workerPath = new URL("./EngineWorker.ts", import.meta.url).pathname;
       } else {
-        workerPath = path.join(__dirname, "EngineWorker.js");
+        workerPath = path.join(__dirname, "EngineWorker.cjs");
       }
 
       this.worker = new Worker(workerPath, { type: "worker" } as any);
@@ -248,7 +248,7 @@ class WorkerEngine {
       this.metrics.status = "ACTIVE_MICROSECOND";
       this.metrics.engineName = "Worker-Thread High-Performance Security Core";
       this.metrics.architecture = `${os.arch()} Parallel Worker Engine`;
-      this.metrics.simdAcceleration = true;
+      this.metrics.simdAcceleration = false;
       this.metrics.activeThreads = os.cpus().length || 1;
       console.log("⚡ [ENGINE] Worker-thread security engine initialized.");
     } catch (err: any) {

@@ -175,4 +175,24 @@ export class LruMap<K, V> {
   get size(): number {
     return this.map.size;
   }
+
+  entries(): IterableIterator<[K, V]> {
+    return this.map.entries();
+  }
+
+  keys(): IterableIterator<K> {
+    return this.map.keys();
+  }
+
+  values(): IterableIterator<V> {
+    return this.map.values();
+  }
+
+  forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any): void {
+    this.map.forEach((value, key) => callbackfn.call(thisArg, value, key, this as any));
+  }
+
+  [Symbol.iterator](): IterableIterator<[K, V]> {
+    return this.map[Symbol.iterator]();
+  }
 }

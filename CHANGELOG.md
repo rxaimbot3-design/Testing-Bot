@@ -61,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Packet scanning with sub-millisecond latency
 - Cryptographic operations (SHA-256, SHA-512, CRC-32)
 - OpenSSL EVP integration
-- SIMD acceleration on x86_64 (AVX2)
+- Deterministic PASS/FLAG/BLOCK decision layer
 - Latency tracking with percentile calculation
 - Worker thread fallback engine
 - Sync fallback engine

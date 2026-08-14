@@ -92,7 +92,7 @@ Detailed health check with system metrics.
     "status": "ACTIVE_MICROSECOND",
     "latencyMicros": 0.5,
     "throughput": 25000,
-    "simd": true,
+    "simd": false,
     "nativeLoaded": true
   },
   "workers": {
@@ -510,7 +510,7 @@ Get C++ engine metrics (requires auth).
   "p95LatencyMicroseconds": 0.8,
   "p99LatencyMicroseconds": 1.2,
   "throughputPerSecond": 25000,
-  "simdAcceleration": true,
+  "simdAcceleration": false,
   "activeThreads": 4,
   "totalAuditsProcessed": 150000,
   "latencySampleCount": 150000

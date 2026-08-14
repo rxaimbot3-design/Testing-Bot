@@ -35,9 +35,62 @@ export function atomicWriteJsonSync(filePath: string, data: any) {
   }
 }
 
+// Memory monitoring for unbounded Maps
+const MEMORY_WARN_THRESHOLD = 10000;
+const MEMORY_CRITICAL_THRESHOLD = 50000;
+
+function checkUnboundedMapSize<K, V>(name: string, map: Map<K, V>, warnAt = MEMORY_WARN_THRESHOLD, criticalAt = MEMORY_CRITICAL_THRESHOLD): void {
+  const size = map.size;
+  if (size > criticalAt) {
+    console.error(`[MEMORY] CRITICAL: ${name} has ${size} entries (limit: ${criticalAt})`);
+  } else if (size > warnAt) {
+    console.warn(`[MEMORY] WARNING: ${name} has ${size} entries (warn: ${warnAt})`);
+  }
+}
+
+export function runMemoryMonitoring(): void {
+  // TokenVault
+  checkUnboundedMapSize("TokenVault.encryptedTokens", TokenVault["encryptedTokens"] as Map<string, any>, 100, 500);
+  
+  // JoinLimitShield
+  checkUnboundedMapSize("JoinLimitShield.joinHistoryByGuild", JoinLimitShield["joinHistoryByGuild"] as Map<string, any>);
+  checkUnboundedMapSize("JoinLimitShield.raidActiveByGuild", JoinLimitShield["raidActiveByGuild"] as Map<string, any>);
+  
+  // InviteTrackerEngine
+  checkUnboundedMapSize("InviteTrackerEngine.userInvites", InviteTrackerEngine["userInvites"] as Map<string, any>);
+  checkUnboundedMapSize("InviteTrackerEngine.invitedByMap", InviteTrackerEngine["invitedByMap"] as Map<string, any>);
+  
+  // AutoHeal
+  checkUnboundedMapSize("AutoHeal.actionHistory", AutoHeal["actionHistory"] as Map<string, any>);
+  checkUnboundedMapSize("AutoHeal.healedChannels", AutoHeal["healedChannels"] as Map<string, any>);
+  
+  // TemporalRaidLock
+  checkUnboundedMapSize("TemporalRaidLock.lockedGuilds", TemporalRaidLock["lockedGuilds"] as Map<string, any>);
+  checkUnboundedMapSize("TemporalRaidLock.joinHistory", TemporalRaidLock["joinHistory"] as Map<string, any>);
+  
+  // AntiVanityHijack
+  checkUnboundedMapSize("AntiVanityHijack.changedCodes", AntiVanityHijack["changedCodes"] as Map<string, any>);
+  
+  // EmojiStickerProtection
+  checkUnboundedMapSize("EmojiStickerProtection.knownEmojis", EmojiStickerProtection["knownEmojis"] as Map<string, any>);
+  checkUnboundedMapSize("EmojiStickerProtection.knownStickers", EmojiStickerProtection["knownStickers"] as Map<string, any>);
+  
+  // ForumChannelProtection
+  checkUnboundedMapSize("ForumChannelProtection.protectedTags", ForumChannelProtection["protectedTags"] as Map<string, any>);
+  
+  // NukeDefense
+  checkUnboundedMapSize("NukeDefense.rolePermissionCache", NukeDefense["rolePermissionCache"] as Map<string, any>);
+  
+  // SessionHijackDetector
+  checkUnboundedMapSize("SessionHijackDetector.userSessions", SessionHijackDetector["userSessions"] as Map<string, any>);
+  
+  // OAuthMaliciousAppDetector
+  checkUnboundedMapSize("OAuthMaliciousAppDetector.realCacheMap", OAuthMaliciousAppDetector["realCacheMap"] as Map<string, any>);
+}
+
 // 1. Token Vault - Encrypts the token in memory with AES-256-GCM & Disk Persistence
 export class TokenVault {
-  private static encryptedTokens: Map<string, { encrypted: string; iv: string; authTag: string }> = new Map();
+  private static encryptedTokens = new LruMap<string, { encrypted: string; iv: string; authTag: string }>(100);
   private static masterSecret = process.env.ADMIN_SECRET || crypto.randomBytes(32).toString("hex");
   private static isCompromised = false;
   private static vaultFile = path.join(process.cwd(), "vault_tokens.json");
@@ -1357,8 +1410,8 @@ export interface ServerBackupData {
 
 // 38. Anti-Raid Join-Limit Shield
 export class JoinLimitShield {
-  private static joinHistoryByGuild: Map<string, number[]> = new Map();
-  private static raidActiveByGuild: Map<string, boolean> = new Map();
+  private static joinHistoryByGuild: TtlMap<string, number[]> = new TtlMap<string, number[]>({ ttlMs: 10000, maxEntries: 10000, autoCleanupMs: 30000 });
+  private static raidActiveByGuild: TtlMap<string, boolean> = new TtlMap<string, boolean>({ ttlMs: 10000, maxEntries: 5000, autoCleanupMs: 30000 });
   private static THRESHOLD = 5; // members
   private static WINDOW = 10000; // 10 seconds
 
@@ -1421,8 +1474,8 @@ export interface UserInviteData {
 }
 
 export class InviteTrackerEngine {
-  private static userInvites = new Map<string, Map<string, UserInviteData>>();
-  private static invitedByMap = new Map<string, Map<string, string>>();
+  private static userInvites = new TtlMap<string, Map<string, UserInviteData>>({ ttlMs: 30 * 24 * 60 * 60 * 1000, maxEntries: 1000, autoCleanupMs: 600000 });
+  private static invitedByMap = new TtlMap<string, Map<string, string>>({ ttlMs: 30 * 24 * 60 * 60 * 1000, maxEntries: 1000, autoCleanupMs: 600000 });
 
   static getUserData(guildId: string, userId: string): UserInviteData {
     if (!this.userInvites.has(guildId)) {
@@ -1594,7 +1647,7 @@ export class DailyBackup {
 
 // 12. Anomaly AI Engine
 export class AnomalyAI {
-  private static actionHistory = new Map<string, number[]>();
+  private static actionHistory = new TtlMap<string, number[]>({ ttlMs: 60 * 60 * 1000, maxEntries: 10000, autoCleanupMs: 300000 });
 
   static recordAction(userId: string): void {
     const now = Date.now();
@@ -1626,7 +1679,7 @@ export class AnomalyAI {
 
 // 17. Auto-Heal System
 export class AutoHeal {
-  private static healedChannels = new Map<string, number>();
+  private static healedChannels = new TtlMap<string, number>({ ttlMs: 24 * 60 * 60 * 1000, maxEntries: 10000, autoCleanupMs: 300000 });
 
   static async restoreChannel(guild: Guild, channelData: { name: string; type: number; parentId?: string | null; topic?: string | null }) {
     const existing = guild.channels.cache.find(c => c.name.toLowerCase() === channelData.name.toLowerCase());
@@ -1684,8 +1737,8 @@ export class AutoHeal {
 
 // 20. Temporal Raid Lock
 export class TemporalRaidLock {
-  private static lockedGuilds = new Map<string, { lockedAt: number; durationMs: number }>();
-  private static joinHistory = new Map<string, number[]>();
+  private static lockedGuilds = new TtlMap<string, { lockedAt: number; durationMs: number }>({ ttlMs: 600000, maxEntries: 5000, autoCleanupMs: 60000 });
+  private static joinHistory = new TtlMap<string, number[]>({ ttlMs: 600000, maxEntries: 10000, autoCleanupMs: 30000 });
 
   static lock(guildId: string, durationMs: number = 600000) {
     this.lockedGuilds.set(guildId, { lockedAt: Date.now(), durationMs });
@@ -1734,7 +1787,7 @@ export class TemporalRaidLock {
 // 28. Anti-Vanity Hijack
 export class AntiVanityHijack {
   private static knownVanityCodes = new Set<string>();
-  private static changedCodes = new Map<string, { oldCode: string; newCode: string; changedAt: number }>();
+  private static changedCodes = new TtlMap<string, { oldCode: string; newCode: string; changedAt: number }>({ ttlMs: 24 * 60 * 60 * 1000, maxEntries: 10000, autoCleanupMs: 300000 });
 
   static trackVanityCode(code: string) {
     if (code) this.knownVanityCodes.add(code.toLowerCase());
@@ -1765,8 +1818,8 @@ export class AntiVanityHijack {
 
 // 29. Emoji/Sticker Protection
 export class EmojiStickerProtection {
-  private static knownEmojis = new Map<string, { name: string; guildId: string }>();
-  private static knownStickers = new Map<string, { name: string; guildId: string }>();
+  private static knownEmojis = new LruMap<string, { name: string; guildId: string }>(10000);
+  private static knownStickers = new LruMap<string, { name: string; guildId: string }>(10000);
 
   static trackEmoji(emoji: any, guildId: string) {
     this.knownEmojis.set(emoji.id, { name: emoji.name, guildId });
@@ -1796,7 +1849,7 @@ export class EmojiStickerProtection {
 
 // 30. Forum Channel Protection
 export class ForumChannelProtection {
-  private static protectedTags = new Map<string, { forumId: string; guildId: string; tagId: string }>();
+  private static protectedTags = new LruMap<string, { forumId: string; guildId: string; tagId: string }>(10000);
 
   static trackForumTag(forumId: string, tagId: string, guildId: string) {
     this.protectedTags.set(tagId, { forumId, guildId, tagId });
@@ -1819,7 +1872,7 @@ export class ForumChannelProtection {
 
 // 26. Auto Permission Rollback
 export class AutoPermissionRollback {
-  private static rolePermissionCache = new Map<string, string>();
+  private static rolePermissionCache = new LruMap<string, string>(10000);
 
   static cacheRole(roleId: string, permissionsBitfield: string) {
     this.rolePermissionCache.set(roleId, permissionsBitfield);
@@ -1862,7 +1915,7 @@ export class HoneypotAdminRole {
 
 // 23. Session Hijack Detector
 export class SessionHijackDetector {
-  private static userSessions = new Map<string, { lastIp?: string; lastUserAgent?: string; timestamps: number[] }>();
+  private static userSessions = new TtlMap<string, { lastIp?: string; lastUserAgent?: string; timestamps: number[] }>({ ttlMs: 60 * 60 * 1000, maxEntries: 10000, autoCleanupMs: 300000 });
 
   static recordAccess(userId: string, ip: string, userAgent?: string): boolean {
     const session = this.userSessions.get(userId) || { timestamps: [] };
@@ -2004,7 +2057,7 @@ export class PremiumLicenseSystem {
 
 // 36. Mongo/Redis Enterprise Cache Engine
 export class MongoRedisEngine {
-  private static realCacheMap = new Map<string, { val: any; exp?: number }>();
+  private static realCacheMap = new TtlMap<string, { val: any; exp?: number }>({ ttlMs: 24 * 60 * 60 * 1000, maxEntries: 10000, autoCleanupMs: 300000 });
   private static redisClient: any = null;
   private static redisAvailable = false;
   private static redisInitPromise: Promise<void> | null = null;
@@ -2092,7 +2145,7 @@ export class MongoRedisEngine {
         this.redisAvailable = false;
       }
     }
-    this.realCacheMap.set(key, { val, exp: ttlSec ? Date.now() + ttlSec * 1000 : undefined });
+    this.realCacheMap.set(key, val);
   }
 
   static async get(key: string) {
@@ -2106,13 +2159,9 @@ export class MongoRedisEngine {
         this.redisAvailable = false;
       }
     }
-    const item = this.realCacheMap.get(key);
-    if (!item) return null;
-    if (item.exp && Date.now() > item.exp) {
-      this.realCacheMap.delete(key);
-      return null;
-    }
-    return item.val;
+    const val = this.realCacheMap.get(key);
+    if (!val) return null;
+    return val;
   }
 
   static async del(key: string) {
