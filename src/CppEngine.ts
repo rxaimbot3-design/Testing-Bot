@@ -211,7 +211,7 @@ class WorkerEngine {
       if (isDev) {
         workerPath = new URL("./EngineWorker.ts", import.meta.url).pathname;
       } else {
-        workerPath = path.join(__dirname, "EngineWorker.js");
+        workerPath = path.join(__dirname, "EngineWorker.cjs");
       }
 
       this.worker = new Worker(workerPath, { type: "worker" } as any);

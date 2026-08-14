@@ -2001,12 +2001,14 @@ client.on("ready", async () => {
         };
         addBotLog(`Successfully logged in as ${user.tag}! Zero Trust Anti-Nuke active.`, "success");
         
-        user.setPresence({
-          activities: [{ name: "🛡️ Anti-Chomu Activated", type: ActivityType.Watching }],
-          status: "online"
-        }).catch((presenceErr) => {
+        try {
+          user.setPresence({
+            activities: [{ name: "🛡️ Anti-Chomu Activated", type: ActivityType.Watching }],
+            status: "online"
+          });
+        } catch (presenceErr) {
           console.error("[BOT-READY] setPresence failed:", presenceErr);
-        });
+        }
       }
 
       // Fetch connected guilds
