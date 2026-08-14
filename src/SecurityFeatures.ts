@@ -217,29 +217,37 @@ export class TokenVault {
  */
 export class OwnerLock {
   private static _allowedOwners: string[] = [];
+  private static _cachedOwners: string[] = [];
+  private static _cacheValid = false;
 
   static get allowedOwners(): string[] {
-    const envOwners = (process.env.ALLOWED_OWNERS || process.env.DISCORD_OWNER_ID || "")
-      .split(",")
-      .map(id => id.trim())
-      .filter(id => id.length > 0);
-    
-    if (envOwners.length === 0 && this._allowedOwners.length === 0) {
-      console.warn("⚠️ [OwnerLock Warning] Neither DISCORD_OWNER_ID nor ALLOWED_OWNERS is set in environment variables!");
-    }
+    if (!this._cacheValid) {
+      const envOwners = (process.env.ALLOWED_OWNERS || process.env.DISCORD_OWNER_ID || "")
+        .split(",")
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+      
+      if (envOwners.length === 0 && this._allowedOwners.length === 0) {
+        console.warn("⚠️ [OwnerLock Warning] Neither DISCORD_OWNER_ID nor ALLOWED_OWNERS is set in environment variables!");
+      }
 
-    const combined = new Set([...this._allowedOwners, ...envOwners]);
-    return Array.from(combined);
+      const combined = new Set([...this._allowedOwners, ...envOwners]);
+      this._cachedOwners = Array.from(combined);
+      this._cacheValid = true;
+    }
+    return this._cachedOwners;
   }
 
   static addOwner(userId: string): void {
     if (userId && !this._allowedOwners.includes(userId)) {
       this._allowedOwners.push(userId);
+      this._cacheValid = false;
     }
   }
 
   static removeOwner(userId: string): void {
     this._allowedOwners = this._allowedOwners.filter(id => id !== userId);
+    this._cacheValid = false;
   }
 
   static isOwner(userId: string, guildOwnerId?: string): boolean {
@@ -1120,13 +1128,13 @@ export class AISecurityReport {
   static async generateReport(): Promise<string> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return "📊 **Daily AI Security Summary**\n- Security Score: **100/100**\n- Status: All 50 Anti-Nuke Modules Active\n- Blocked Attacks: 142 neutralized threats.\n*(Configure `GEMINI_API_KEY` for custom deep executive report)*";
+      return "📊 **Daily AI Security Summary**\n- AI report unavailable: GEMINI_API_KEY not configured.\n- Security modules remain active with deterministic rules.\n- Configure GEMINI_API_KEY to enable AI-generated executive reports.";
     }
 
     try {
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `Write a professional 4-bullet executive security report for a Discord Server. 
-State that Zero Trust Anti-Nuke, AI Raid Prediction, Honeypot Traps, and AES-256 Vault are 100% operational.
+State that Zero Trust Anti-Nuke, AI Raid Prediction, Honeypot Traps, and AES-256 Vault are operational.
 Include 1 proactive recommendation for server admins. Keep it scannable and authoritative.`;
 
       const response = await ai.models.generateContent({
@@ -1134,13 +1142,13 @@ Include 1 proactive recommendation for server admins. Keep it scannable and auth
         contents: prompt
       });
 
-      return response.text || "Daily AI Security Scan Completed: 100% Clean.";
+      return response.text || "Daily AI Security Scan Completed: No anomalies detected.";
     } catch (err: any) {
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
         console.warn(AI_QUOTA_WARNING);
       }
-      return "📊 **Daily AI Security Report**\n- 100/100 Zero Trust Active\n- No active breach vectors detected.";
+      return "📊 **Daily AI Security Report**\n- AI report generation failed. Deterministic security rules remain active.\n- Check GEMINI_API_KEY configuration and API quota.";
     }
   }
 }

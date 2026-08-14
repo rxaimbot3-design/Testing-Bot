@@ -161,7 +161,12 @@ export class LruMap<K, V> {
   }
 
   has(key: K): boolean {
-    return this.map.has(key);
+    const value = this.map.get(key);
+    if (value !== undefined) {
+      this.map.delete(key);
+      this.map.set(key, value);
+    }
+    return value !== undefined;
   }
 
   delete(key: K): boolean {

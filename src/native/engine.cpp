@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <thread>
+#include <cinttypes>
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
@@ -81,16 +82,16 @@ namespace {
   //  Real SHA-256 / SHA-512 via OpenSSL EVP
   // ============================================================
   std::string EvpHex(const EVP_MD* md, const std::string& data) {
-    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) return {};
 
     unsigned char digest[EVP_MAX_MD_SIZE] = {0};
     unsigned int  digest_len = 0;
 
     std::string result;
-    if (EVP_DigestInit_ex(ctx, md, nullptr) &&
-        EVP_DigestUpdate(ctx, data.c_str(), data.size()) &&
-        EVP_DigestFinal_ex(ctx, digest, &digest_len)) {
+    if (EVP_DigestInit_ex(ctx.get(), md, nullptr) &&
+        EVP_DigestUpdate(ctx.get(), data.c_str(), data.size()) &&
+        EVP_DigestFinal_ex(ctx.get(), digest, &digest_len)) {
       char buf[kMaxHashHexChars] = {0};
       for (unsigned int i = 0; i < digest_len; ++i) {
         std::snprintf(buf + i * 2, 3, "%02x", digest[i]);
@@ -98,7 +99,6 @@ namespace {
       result.assign(buf, digest_len * 2);
     }
 
-    EVP_MD_CTX_free(ctx);
     return result;
   }
 
@@ -162,9 +162,10 @@ namespace {
   // ============================================================
   //  Helper: pack 4 x 32-bit fields into a 128-bit-ish string for hashing
   // ============================================================
-  inline std::string PackEvent(const DetectionEvent& ev) {
-    char buf[64] = {0};
-    std::snprintf(buf, sizeof(buf), "%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u",
+  std::string PackEvent(const DetectionEvent& ev) {
+    char buf[256] = {0};
+    std::snprintf(buf, sizeof(buf),
+      "%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:%" PRIu64,
       static_cast<uint32_t>(ev.type),
       ev.user_id,
       ev.guild_id,
@@ -178,7 +179,8 @@ namespace {
       ev.perms_removed,
       ev.event_count_1s,
       ev.event_count_10s,
-      static_cast<uint32_t>(ev.timestamp_us & 0xFFFFFFFF));
+      static_cast<uint32_t>(ev.timestamp_us & 0xFFFFFFFFU),
+      ev.timestamp_us);
     return std::string(buf);
   }
 }
@@ -208,6 +210,7 @@ public:
 
   MemoryArena(MemoryArena&& other) noexcept
     : buffer_(other.buffer_), capacity_(other.capacity_), offset_(other.offset_), owns_(other.owns_) {
+    std::lock_guard<std::mutex> lock(other.mutex_);
     other.buffer_ = nullptr;
     other.capacity_ = 0;
     other.offset_ = 0;
@@ -218,6 +221,7 @@ public:
     if (this != &other) {
       reset();
       if (owns_ && buffer_) std::free(buffer_);
+      std::lock_guard<std::mutex> lock(other.mutex_);
       buffer_ = other.buffer_;
       capacity_ = other.capacity_;
       offset_ = other.offset_;
@@ -231,6 +235,7 @@ public:
   }
 
   uint8_t* allocate(size_t n) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (!buffer_ || n == 0) return nullptr;
     size_t aligned = (n + kArenaAlignment - 1) & ~(kArenaAlignment - 1);
     if (offset_ + aligned > capacity_) return nullptr;
@@ -239,16 +244,23 @@ public:
     return ptr;
   }
 
-  void reset() { offset_ = 0; }
+  void reset() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    offset_ = 0;
+  }
   size_t capacity() const { return capacity_; }
-  size_t used() const     { return offset_; }
-  bool owns() const       { return owns_; }
+  size_t used() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return offset_;
+  }
+  bool owns() const { return owns_; }
 
 private:
   uint8_t* buffer_;
   size_t    capacity_;
   size_t    offset_;
   bool      owns_;
+  mutable std::mutex mutex_;
 };
 
 // ================================================================
@@ -277,6 +289,8 @@ public:
   double percentile(double p) const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (count_ == 0) return 0.0;
+    if (p <= 0.0) p = 0.0;
+    if (p >= 100.0) p = 100.0;
     std::vector<int64_t> copy;
     copy.reserve(count_);
     size_t start = write_pos_ >= count_ ? write_pos_ - count_ : 0;
@@ -286,6 +300,7 @@ public:
     std::sort(copy.begin(), copy.end());
     size_t idx = static_cast<size_t>(std::ceil(p / 100.0 * copy.size()) - 1);
     if (idx >= copy.size()) idx = copy.size() - 1;
+    if (idx < 0) idx = 0;
     return static_cast<double>(copy[idx]);
   }
 
@@ -338,25 +353,56 @@ DetectionEvent SecurityEngine::ParseEvent(double risk_weight,
                                            uint32_t packet_id,
                                            const Napi::Object& obj) {
   DetectionEvent ev{};
-  ev.type = static_cast<EventType>(static_cast<uint32_t>(
-    obj.Has("eventType") ? obj.Get("eventType").As<Napi::Number>().Uint32Value() : 0));
-  ev.user_id = obj.Has("userId") ? obj.Get("userId").As<Napi::Number>().Uint32Value() : packet_id;
-  ev.guild_id = obj.Has("guildId") ? obj.Get("guildId").As<Napi::Number>().Uint32Value() : 0;
-  ev.timestamp_us = obj.Has("timestamp")
-    ? static_cast<uint64_t>(obj.Get("timestamp").As<Napi::Number>().DoubleValue())
-    : static_cast<uint64_t>(TimeMicros());
-  ev.channel_count = obj.Has("channelCount") ? obj.Get("channelCount").As<Napi::Number>().Uint32Value() : 0;
-  ev.role_count    = obj.Has("roleCount")    ? obj.Get("roleCount").As<Napi::Number>().Uint32Value()    : 0;
-  ev.ban_count     = obj.Has("banCount")     ? obj.Get("banCount").As<Napi::Number>().Uint32Value()     : 0;
-  ev.kick_count    = obj.Has("kickCount")    ? obj.Get("kickCount").As<Napi::Number>().Uint32Value()    : 0;
-  ev.webhook_count = obj.Has("webhookCount") ? obj.Get("webhookCount").As<Napi::Number>().Uint32Value() : 0;
-  ev.bot_count     = obj.Has("botCount")     ? obj.Get("botCount").As<Napi::Number>().Uint32Value()     : 0;
-  ev.perms_added   = obj.Has("permsAdded")   ? obj.Get("permsAdded").As<Napi::Number>().Uint32Value()   : 0;
-  ev.perms_removed = obj.Has("permsRemoved") ? obj.Get("permsRemoved").As<Napi::Number>().Uint32Value() : 0;
-  ev.event_count_1s  = obj.Has("eventCount1s")  ? obj.Get("eventCount1s").As<Napi::Number>().Uint32Value()  : 0;
-  ev.event_count_10s = obj.Has("eventCount10s") ? obj.Get("eventCount10s").As<Napi::Number>().Uint32Value() : 0;
 
-  // Inject risk_weight into unused field for scoring influence
+  if (!obj.Has("eventType") || !obj.Get("eventType").IsNumber()) {
+    Napi::TypeError::New(obj.Env(), "eventType must be a number").ThrowAsJavaScriptException();
+    return ev;
+  }
+  uint32_t evt = obj.Get("eventType").As<Napi::Number>().Uint32Value();
+  if (evt > static_cast<uint32_t>(EventType::kGuildBan)) {
+    evt = static_cast<uint32_t>(EventType::kUnknown);
+  }
+  ev.type = static_cast<EventType>(evt);
+
+  if (!obj.Has("userId") || !obj.Get("userId").IsNumber()) {
+    Napi::TypeError::New(obj.Env(), "userId must be a number").ThrowAsJavaScriptException();
+    return ev;
+  }
+  ev.user_id = obj.Get("userId").As<Napi::Number>().Uint32Value();
+
+  if (!obj.Has("guildId") || !obj.Get("guildId").IsNumber()) {
+    Napi::TypeError::New(obj.Env(), "guildId must be a number").ThrowAsJavaScriptException();
+    return ev;
+  }
+  ev.guild_id = obj.Get("guildId").As<Napi::Number>().Uint32Value();
+
+  if (obj.Has("timestamp") && obj.Get("timestamp").IsNumber()) {
+    double ts = obj.Get("timestamp").As<Napi::Number>().DoubleValue();
+    if (ts > 0 && std::isfinite(ts)) {
+      ev.timestamp_us = static_cast<uint64_t>(ts);
+    } else {
+      ev.timestamp_us = static_cast<uint64_t>(TimeMicros());
+    }
+  } else {
+    ev.timestamp_us = static_cast<uint64_t>(TimeMicros());
+  }
+
+  auto getU32 = [&](const char* name, uint32_t& out) {
+    if (obj.Has(name) && obj.Get(name).IsNumber()) {
+      out = obj.Get(name).As<Napi::Number>().Uint32Value();
+    }
+  };
+  getU32("channelCount", ev.channel_count);
+  getU32("roleCount",    ev.role_count);
+  getU32("banCount",     ev.ban_count);
+  getU32("kickCount",    ev.kick_count);
+  getU32("webhookCount", ev.webhook_count);
+  getU32("botCount",     ev.bot_count);
+  getU32("permsAdded",   ev.perms_added);
+  getU32("permsRemoved", ev.perms_removed);
+  getU32("eventCount1s",  ev.event_count_1s);
+  getU32("eventCount10s", ev.event_count_10s);
+
   (void)risk_weight;
   return ev;
 }
@@ -387,11 +433,11 @@ std::pair<double, std::string> SecurityEngine::EvaluateRule(const DetectionEvent
       }
       break;
 
-    case EventType::kMassBanKick:
-      if ((ev.ban_count + ev.kick_count) >= kMassBanKickThreshold) {
-        add(50.0, "mass_ban_kick");
-      }
-      break;
+  case EventType::kMassBanKick:
+    if ((static_cast<uint64_t>(ev.ban_count) + static_cast<uint64_t>(ev.kick_count)) >= kMassBanKickThreshold) {
+      add(50.0, "mass_ban_kick");
+    }
+    break;
 
     case EventType::kPermEscalation:
       if (ev.perms_added > 0 && ev.perms_removed == 0) {
@@ -473,7 +519,9 @@ Napi::Object SecurityEngine::Init(Napi::Env env, Napi::Object exports) {
 
   Napi::FunctionReference* ctor = new Napi::FunctionReference();
   *ctor = Napi::Persistent(func);
-  env.SetInstanceData(ctor);
+  env.SetInstanceData(ctor, [](Napi::Env, void* data) {
+    delete static_cast<Napi::FunctionReference*>(data);
+  });
 
   exports.Set("SecurityEngine", func);
   return exports;
@@ -506,14 +554,12 @@ Napi::Value SecurityEngine::ScanPacket(const Napi::CallbackInfo& info) {
   }
 
   uint32_t packet_id = info[0].As<Napi::Number>().Uint32Value();
-  Napi::Object event_obj = info[1].As<Napi::Object>();
-
-  // Basic bounds validation
   if (packet_id == 0) {
     Napi::RangeError::New(info.Env(), "packetId must be > 0")
       .ThrowAsJavaScriptException();
     return info.Env().Null();
   }
+  Napi::Object event_obj = info[1].As<Napi::Object>();
 
   auto t0 = std::chrono::high_resolution_clock::now();
 
@@ -530,10 +576,10 @@ Napi::Value SecurityEngine::ScanPacket(const Napi::CallbackInfo& info) {
 
   // Blend riskWeight into score for backward compatibility
   double risk_weight = 0.0;
-  if (event_obj.Has("riskWeight") && !event_obj.Get("riskWeight").IsUndefined() && !event_obj.Get("riskWeight").IsNull()) {
+  if (event_obj.Has("riskWeight") && !event_obj.Get("riskWeight").IsUndefined() && !event_obj.Get("riskWeight").IsNull() && event_obj.Get("riskWeight").IsNumber()) {
     risk_weight = event_obj.Get("riskWeight").As<Napi::Number>().DoubleValue();
   }
-  if (risk_weight < 0.0) risk_weight = 0.0;
+  if (!std::isfinite(risk_weight) || risk_weight < 0.0) risk_weight = 0.0;
   if (risk_weight > 1000.0) risk_weight = 1000.0;
 
   double score = ruleScore;
@@ -569,6 +615,7 @@ Napi::Value SecurityEngine::ScanPacket(const Napi::CallbackInfo& info) {
 
   latency_.record(micros);
   audit_counter_.fetch_add(1, std::memory_order_relaxed);
+  arena_.reset();
 
   Napi::Object result = Napi::Object::New(info.Env());
   result.Set("passed",        decision != Decision::kBlock);
@@ -643,10 +690,10 @@ Napi::Value SecurityEngine::ScanBatch(const Napi::CallbackInfo& info) {
     auto [ruleScore, rule] = EvaluateRule(ev);
 
     double risk_weight = 0.0;
-    if (event_objs[i].Has("riskWeight") && !event_objs[i].Get("riskWeight").IsUndefined() && !event_objs[i].Get("riskWeight").IsNull()) {
+    if (event_objs[i].Has("riskWeight") && !event_objs[i].Get("riskWeight").IsUndefined() && !event_objs[i].Get("riskWeight").IsNull() && event_objs[i].Get("riskWeight").IsNumber()) {
       risk_weight = event_objs[i].Get("riskWeight").As<Napi::Number>().DoubleValue();
     }
-    if (risk_weight < 0.0) risk_weight = 0.0;
+    if (!std::isfinite(risk_weight) || risk_weight < 0.0) risk_weight = 0.0;
     if (risk_weight > 1000.0) risk_weight = 1000.0;
 
     double score = ruleScore;
@@ -687,6 +734,7 @@ Napi::Value SecurityEngine::ScanBatch(const Napi::CallbackInfo& info) {
     results[i] = res;
   }
 
+  arena_.reset();
   return results;
 }
 
@@ -797,8 +845,6 @@ Napi::Value SecurityEngine::ResetMetrics(const Napi::CallbackInfo& info) {
 //  Module entry point
 // ================================================================
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  OpenSSL_add_all_digests();
-  ERR_load_crypto_strings();
   return SecurityEngine::Init(env, exports);
 }
 

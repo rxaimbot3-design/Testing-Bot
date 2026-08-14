@@ -10,7 +10,7 @@ import fs from "fs";
 import zlib from "zlib";
 import os from "os";
 import dotenv from "dotenv";
-dotenv.config({ override: true });
+dotenv.config();
 import crypto from "crypto";
 import { exec, execFile } from "child_process";
 import { promisify } from "util";
@@ -38,11 +38,11 @@ const execFileAsync = promisify(execFile);
 
 try {
   if (fs.existsSync("./discord_config.json")) {
-    const dcfg = JSON.parse(fs.readFileSync("./discord_config.json", "utf8"));
-    if (dcfg.token) {
+    const dcfg = readEncryptedConfig("./discord_config.json");
+    if (dcfg?.token) {
       process.env.DISCORD_BOT_TOKEN = dcfg.token;
     }
-    if (dcfg.clientId) {
+    if (dcfg?.clientId) {
       process.env.DISCORD_CLIENT_ID = dcfg.clientId;
     }
   }
@@ -59,6 +59,61 @@ validateEnvironmentVariables();
 CanaryToken.setup();
 AdminWhitelistSystem.loadWhitelist();
 console.log("🛡️ [WHITELIST SYSTEM] Admin Whitelist System initialized and active.");
+
+// ================================================================
+//  Encrypted Config File Helpers
+// ================================================================
+function getConfigKey(): Buffer {
+  const secret = process.env.ADMIN_SECRET || "";
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+function encryptConfig(data: string): string {
+  const key = getConfigKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(data, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return JSON.stringify({ iv: iv.toString("base64"), data: encrypted.toString("base64"), tag: tag.toString("base64") });
+}
+
+function decryptConfig(encoded: string): string {
+  try {
+    const parsed = JSON.parse(encoded);
+    const key = getConfigKey();
+    const iv = Buffer.from(parsed.iv, "base64");
+    const data = Buffer.from(parsed.data, "base64");
+    const tag = Buffer.from(parsed.tag, "base64");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
+  } catch {
+    return encoded;
+  }
+}
+
+function readEncryptedConfig(filePath: string): any {
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, "utf8");
+      const decrypted = decryptConfig(raw);
+      return JSON.parse(decrypted);
+    }
+  } catch (e) {
+    console.error(`Failed to load ${filePath}:`, e);
+  }
+  return null;
+}
+
+function writeEncryptedConfig(filePath: string, data: any): void {
+  try {
+    const json = JSON.stringify(data, null, 2);
+    const encrypted = encryptConfig(json);
+    fs.writeFileSync(filePath, encrypted, "utf8");
+  } catch (e) {
+    console.error(`Failed to save ${filePath}:`, e);
+  }
+}
 
 // Admin Audit Logging System
 interface AuditLogRecord {
@@ -313,7 +368,7 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,
 }));
-const allowedOrigin = process.env.ALLOWED_ORIGIN || process.env.APP_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : true);
+const allowedOrigin = process.env.ALLOWED_ORIGIN || process.env.APP_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : false);
 app.use(cors({ origin: allowedOrigin, credentials: true }));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -344,6 +399,11 @@ async function gracefulShutdown(signal: string) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+  const shutdownTimeout = setTimeout(() => {
+    console.error("Shutdown timed out, forcing exit.");
+    process.exit(1);
+  }, 30000);
 
   try {
     httpServer?.close(() => console.log("HTTP server stopped accepting new connections."));
@@ -382,6 +442,22 @@ async function gracefulShutdown(signal: string) {
     console.error("Error stopping Discord bot during shutdown:", e);
   }
 
+  try {
+    saveWhitelistState();
+    console.log("Whitelist state saved.");
+  } catch (e) {
+    console.error("Error saving whitelist during shutdown:", e);
+  }
+
+  try {
+    const { SecurityPipeline } = require('./src/security/Pipeline.js');
+    SecurityPipeline.reset();
+    console.log("Security pipeline state cleared.");
+  } catch {
+    // ignore
+  }
+
+  clearTimeout(shutdownTimeout);
   console.log("Graceful shutdown complete.");
   process.exit(0);
 }
@@ -391,8 +467,8 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Enable JSON & Cookie parsing
 
-app.use('/api/github/webhook', express.raw({ type: 'application/json' }));
-app.use(express.json({ limit: "10kb" }));
+app.use('/api/github/webhook', express.raw({ type: 'application/json', limit: '100kb' }));
+app.use(express.json({ limit: "100kb" }));
 
 app.use(cookieParser());
 
@@ -581,7 +657,7 @@ function createZipArchiveBuffer(baseDir: string): Buffer {
 
 app.get("/api/download/source", (req, res) => {
   try {
-    const authKey = (req.headers["x-admin-key"] || req.query.admin_key || req.headers["authorization"] || "") as string;
+    const authKey = (req.headers["x-admin-key"] || req.headers["authorization"] || "") as string;
     const cookieToken = req.cookies?.admin_session_token || "";
     const adminSecret = process.env.ADMIN_SECRET!;
     
@@ -842,7 +918,7 @@ app.get("/api/auth/session", (req, res) => {
   try {
     const clientIp = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
 
-    const authHeader = (req.headers["authorization"] || req.headers["x-admin-key"] || req.query.admin_key || "") as string;
+    const authHeader = (req.headers["authorization"] || req.headers["x-admin-key"] || "") as string;
     const cookieToken = req.cookies?.admin_session_token || "";
     const tokenStr = authHeader.replace(/^Bearer\s+/i, "").trim() || cookieToken;
     const validSecret = process.env.ADMIN_SECRET || "";
@@ -903,7 +979,7 @@ app.delete("/api/admin/whitelist/:id", requireAdminAuth, (req, res) => {
   return res.status(404).json({ success: false, error: "Whitelist entry not found." });
 });
 
-app.post("/api/auth/logout", (req, res) => {
+app.post("/api/auth/logout", requireAdminAuth, (req, res) => {
   try {
     const authHeader = (req.headers["authorization"] || req.headers["x-admin-key"] || "") as string;
     const cookieToken = req.cookies?.admin_session_token || "";
@@ -942,7 +1018,15 @@ app.post("/api/admin/backup-integrity-test", requireAdminAuth, async (req, res) 
 
 app.post("/api/admin/secrets-scan", requireAdminAuth, async (req, res) => {
   try {
-    const { targetPath = process.cwd() } = req.body || {};
+    const allowedBase = process.cwd();
+    let targetPath = process.cwd();
+    if (req.body && typeof req.body.targetPath === "string" && req.body.targetPath.trim()) {
+      const resolved = path.resolve(allowedBase, req.body.targetPath);
+      if (!resolved.startsWith(allowedBase)) {
+        return res.status(403).json({ success: false, error: "Access denied: path traversal blocked." });
+      }
+      targetPath = resolved;
+    }
     let scannedContent = "";
     try {
       scannedContent = fs.readFileSync(targetPath, "utf8");
@@ -1189,10 +1273,10 @@ app.post("/api/discord/connect", requireAdminAuth, async (req, res) => {
     
     // Persist to file
     try {
-      fs.writeFileSync("./discord_config.json", JSON.stringify({
+      writeEncryptedConfig("./discord_config.json", {
         token: process.env.DISCORD_BOT_TOKEN || "",
         clientId: process.env.DISCORD_CLIENT_ID || ""
-      }, null, 2));
+      });
     } catch (e) {
       console.error("Failed to save discord_config.json:", e);
     }
@@ -2055,11 +2139,11 @@ let linkedRepo = "rxaimbot3-design/ultimate-discord-ai-bot";
 
 try {
   if (fs.existsSync("./github_config.json")) {
-    const ghcfg = JSON.parse(fs.readFileSync("./github_config.json", "utf8"));
-    if (ghcfg.token) {
+    const ghcfg = readEncryptedConfig("./github_config.json");
+    if (ghcfg?.token) {
       process.env.GITHUB_TOKEN = ghcfg.token;
     }
-    if (ghcfg.repo) {
+    if (ghcfg?.repo) {
       linkedRepo = ghcfg.repo;
     }
   }
@@ -2149,10 +2233,10 @@ app.post("/api/github/link-repo", requireAdminAuth, async (req, res) => {
 
   linkedRepo = repo;
   try {
-    fs.writeFileSync("./github_config.json", JSON.stringify({
+    writeEncryptedConfig("./github_config.json", {
       token: process.env.GITHUB_TOKEN || "",
       repo: linkedRepo
-    }, null, 2));
+    });
   } catch (e) {
     console.error("Failed to save github_config.json:", e);
   }
@@ -2188,10 +2272,10 @@ app.post("/api/github/save-token", requireAdminAuth, async (req, res) => {
 
     process.env.GITHUB_TOKEN = cleanToken;
     try {
-      fs.writeFileSync("./github_config.json", JSON.stringify({
+      writeEncryptedConfig("./github_config.json", {
         token: cleanToken,
         repo: linkedRepo
-      }, null, 2));
+      });
     } catch (e) {
       console.error("Failed to save github_config.json:", e);
     }
