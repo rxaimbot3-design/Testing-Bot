@@ -513,10 +513,30 @@ let strictAdminFreeze = false; // If true, non-whitelisted administrators are fr
 
 const DATA_FILE = path.join(process.cwd(), "whitelist_data.json");
 
+function signWhitelistData(data: any): string {
+  const json = JSON.stringify(data);
+  const mac = (crypto as any).createHmac("sha256", process.env.ADMIN_SECRET || "").update(json).digest("hex");
+  return JSON.stringify({ data, mac });
+}
+
+function verifyWhitelistData(encoded: string): any {
+  try {
+    const parsed = JSON.parse(encoded);
+    if (!parsed.data || !parsed.mac) return null;
+    const json = JSON.stringify(parsed.data);
+    const expectedMac = (crypto as any).createHmac("sha256", process.env.ADMIN_SECRET || "").update(json).digest("hex");
+    if (parsed.mac !== expectedMac) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
 function loadWhitelistState() {
   try {
     if (fs.existsSync(DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+      const raw = fs.readFileSync(DATA_FILE, "utf-8");
+      const data = verifyWhitelistData(raw) || JSON.parse(raw);
       if (Array.isArray(data.ownerWhitelist)) ownerWhitelist = data.ownerWhitelist;
       if (Array.isArray(data.approvedBots)) approvedBots = data.approvedBots;
       if (typeof data.blockedAttacksCount === "number") blockedAttacksCount = data.blockedAttacksCount;
@@ -534,7 +554,8 @@ export function saveWhitelistState() {
       approvedBots,
       blockedAttacksCount
     };
-    atomicWriteJsonSync(DATA_FILE, data);
+    const signed = signWhitelistData(data);
+    fs.writeFileSync(DATA_FILE, signed, "utf-8");
   } catch (err: any) {
     console.error("Failed to save whitelist data:", err.message);
   }
@@ -3172,7 +3193,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                        memberPerms?.has(PermissionFlagsBits.ManageGuild) || 
                        memberPerms?.has(PermissionFlagsBits.ManageChannels) ||
                        interaction.user.id === interaction.guild?.ownerId || 
-                       isOwnerOrWhitelisted(interaction.user.id, interaction.guild);
+                       (interaction.guild ? isOwnerOrWhitelisted(interaction.user.id, interaction.guild) : false);
 
         if (!isAuth) {
           await interaction.respond([]).catch(() => {});
@@ -3285,7 +3306,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
       // 5. Handle User Context Menu Commands
       if (interaction.isUserContextMenuCommand()) {
         const memberPerms = interaction.memberPermissions;
-        if (!memberPerms?.has(PermissionFlagsBits.Administrator) && !memberPerms?.has(PermissionFlagsBits.ManageGuild) && interaction.user.id !== interaction.guild?.ownerId && !isOwnerOrWhitelisted(interaction.user.id, interaction.guild)) {
+        if (!memberPerms?.has(PermissionFlagsBits.Administrator) && !memberPerms?.has(PermissionFlagsBits.ManageGuild) && interaction.user.id !== interaction.guild?.ownerId && !(interaction.guild ? isOwnerOrWhitelisted(interaction.user.id, interaction.guild) : false)) {
           await interaction.reply({ content: "❌ **Access Denied!** Requires Administrator or Manage Server permissions.", ephemeral: true });
           return;
         }

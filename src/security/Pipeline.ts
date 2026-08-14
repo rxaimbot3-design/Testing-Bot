@@ -62,6 +62,23 @@ export class SecurityPipeline {
   }
 
   static processEvent(event: SecurityEvent): PipelineResult {
+    if (!event.type || !event.userId || !event.guildId) {
+      const result: PipelineResult = {
+        blocked: false,
+        action: "monitor",
+        reason: "Invalid event: missing required fields",
+        score: 0,
+        rule: "invalid_input",
+        canRollback: false
+      };
+      this.logDecision(event, result);
+      return result;
+    }
+
+    if (typeof event.timestamp !== 'number' || event.timestamp <= 0) {
+      event.timestamp = Date.now();
+    }
+
     // Emergency lockdown blocks all non-owner actions
     if (this.lockdownMode && !this.isTrusted(event.userId)) {
       const result: PipelineResult = {
@@ -76,27 +93,11 @@ export class SecurityPipeline {
       return result;
     }
 
-    if (this.isTrusted(event.userId)) {
-      const result: PipelineResult = { blocked: false, action: "allow_trusted", reason: "User is trusted", score: 0, rule: "trusted", canRollback: false };
-      this.logDecision(event, result);
-      return result;
-    }
-
     const now = event.timestamp || Date.now();
     const { score, rule } = this.evaluateEvent(event, now);
 
-    // Duplicate detection (log only, does not block)
-    const payloadHash = JSON.stringify(event.payload || {});
-    const duplicateKey = `${event.guildId}:${event.userId}:${event.type}:${payloadHash}`;
-    const lastDuplicate = this.duplicatePayloadTracker.get(duplicateKey);
-    if (lastDuplicate && Date.now() - lastDuplicate < 50) {
-      // Log duplicate for audit trail but continue processing
-    }
-    this.duplicatePayloadTracker.set(duplicateKey, Date.now());
-
     const action = this.decideAction(score);
 
-    // False-positive protection: if quarantined and released within 60s, reduce score
     const adjustedScore = this.adjustForFalsePositive(event.userId, score);
 
     const result: PipelineResult = {
@@ -121,7 +122,7 @@ export class SecurityPipeline {
     let score = 0;
     let rule = "none";
     const key = `${event.guildId}:${event.userId}`;
-    const history = this.burstHistory.get(key) || [];
+    const history = [...(this.burstHistory.get(key) || [])];
     history.push(now);
     this.burstHistory.set(key, history);
 
@@ -185,9 +186,8 @@ export class SecurityPipeline {
   }
 
   private static adjustForFalsePositive(userId: string, score: number): number {
-    // If user was recently quarantined and released, apply false-positive damping
-    if (this.recentQuarantines.has(userId)) {
-      return Math.max(0, score - 20);
+    if (this.recentQuarantines.has(userId) && score < 50) {
+      return Math.max(0, score - 10);
     }
     return score;
   }
@@ -220,8 +220,8 @@ export class SecurityPipeline {
     for (let i = this.decisionLog.length - 1; i >= 0; i--) {
       const record = this.decisionLog[i];
       if (record.event.userId === userId && record.event.guildId === guildId && record.result.canRollback) {
-        const undone = this.decisionLog.splice(i, 1)[0];
-        return { ...undone.result, action: "rollback", reason: `Rolled back: ${undone.result.reason}` };
+        this.decisionLog.splice(i, 1);
+        return { ...record.result, action: "rollback", reason: `Rolled back: ${record.result.reason}` };
       }
     }
     return null;
@@ -239,11 +239,11 @@ export class SecurityPipeline {
   }
 
   static reset(): void {
-    this.burstHistory.clear();
+    this.burstHistory.destroy();
     this.trustedUsers.clear();
-    this.duplicatePayloadTracker.clear();
+    this.duplicatePayloadTracker.destroy();
     this.decisionLog.length = 0;
     this.lockdownMode = false;
-    this.recentQuarantines.clear();
+    this.recentQuarantines.destroy();
   }
 }

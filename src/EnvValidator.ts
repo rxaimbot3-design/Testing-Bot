@@ -12,8 +12,8 @@ export function validateEnvironmentVariables(): EnvValidationResult {
   // 1. Critical Required Variables
   const token = (process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN)?.trim();
   if (!token) {
-    missingOptional.push('DISCORD_BOT_TOKEN');
-    warnings.push('⚠️ Warning: DISCORD_BOT_TOKEN is missing. Discord Bot will remain offline.');
+    missingRequired.push('DISCORD_BOT_TOKEN');
+    warnings.push('❌ Critical Error: DISCORD_BOT_TOKEN is missing. Discord Bot will remain offline.');
   }
 
   const adminSecret = process.env.ADMIN_SECRET?.trim();
@@ -56,7 +56,7 @@ export function validateEnvironmentVariables(): EnvValidationResult {
   }
 
   if (!process.env.NODE_ENV) {
-    process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+    process.env.NODE_ENV = 'production';
   }
 
   const isValid = missingRequired.length === 0;

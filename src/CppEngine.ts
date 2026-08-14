@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { Worker } from "worker_threads";
 import { createRequire } from "module";
 import { createHash } from "crypto";
+import { SecurityPipeline, SecurityEvent } from "./security/Pipeline.js";
 
 const __filename = typeof import.meta !== "undefined" && import.meta.url
   ? fileURLToPath(import.meta.url)
@@ -153,7 +154,8 @@ class WorkerEngine {
   private pendingRequests = new Map<number, { resolve: (value: any) => void; reject: (err: Error) => void }>();
   private requestId = 0;
   private metrics: CppEngineMetrics;
-  private fallbackCounter = 0;
+  private scanFailureCount = 0;
+  private hashFailureCount = 0;
   private fallbackBuffer: { view32: Uint32Array } | null = null;
   private restartAttempts = 0;
   private maxRestartAttempts = 5;
@@ -296,9 +298,9 @@ class WorkerEngine {
       this.fallbackCounter = 0;
       return results;
     } catch {
-      this.fallbackCounter++;
-      if (this.fallbackCounter > 5) {
-        console.warn("⚠️ [ENGINE] Too many worker failures, disabling worker for this session.");
+      this.scanFailureCount++;
+      if (this.scanFailureCount > 5) {
+        console.warn("⚠️ [ENGINE] Too many scan worker failures, disabling worker for this session.");
         this.workerReady = false;
       }
       return this.fallbackScanBatch(requests);
@@ -312,10 +314,10 @@ class WorkerEngine {
 
     try {
       const results = await this.sendRequest("compute_hashes", requests);
-      this.fallbackCounter = 0;
+      this.hashFailureCount = 0;
       return results;
     } catch {
-      this.fallbackCounter++;
+      this.hashFailureCount++;
       return this.fallbackComputeHashes(requests);
     }
   }
@@ -367,10 +369,17 @@ class WorkerEngine {
 
   reset() {
     this.workerReady = false;
-    this.worker = null;
+    if (this.worker) {
+      try {
+        this.worker.removeAllListeners();
+        this.worker.terminate();
+      } catch {}
+      this.worker = null;
+    }
     this.pendingRequests.clear();
     this.requestId = 0;
-    this.fallbackCounter = 0;
+    this.scanFailureCount = 0;
+    this.hashFailureCount = 0;
     this.restartAttempts = 0;
     this.restartBackoffMs = 1000;
     if (this.restartTimer) {
@@ -381,24 +390,40 @@ class WorkerEngine {
 
   private fallbackScanBatch(requests: ScanRequest[]): Array<{ passed: boolean; latencyMicros: number; score: number }> {
     const view32 = this.fallbackBuffer?.view32;
-    if (!view32) {
-      return requests.map(() => ({ passed: true, latencyMicros: 12, score: 100 }));
-    }
     return requests.map((req) => {
       const startTime = process.hrtime.bigint();
-      const slot = (req.packetId % 1000) * 4;
-      view32[slot] = req.packetId;
-      view32[slot + 1] = Math.floor(req.riskWeight * 1000);
-      let checksum = 0xABCD1234;
-      checksum = (checksum ^ req.packetId) << 3;
-      view32[slot + 2] = checksum;
+      let score = 0;
+      let passed = true;
+      
+      if (req.riskWeight > 0) {
+        try {
+          const pipelineEvent: SecurityEvent = {
+            type: this.mapRiskWeightToEventType(req.riskWeight),
+            userId: String(req.packetId),
+            guildId: "default",
+            timestamp: Date.now(),
+            payload: { riskWeight: req.riskWeight, packetId: req.packetId }
+          };
+          const result = SecurityPipeline.processEvent(pipelineEvent);
+          score = result.score;
+          passed = !result.blocked;
+        } catch {
+          score = Math.max(0, Math.min(100, req.riskWeight / 10));
+          passed = score < 50;
+        }
+      }
+      
+      if (view32) {
+        const slot = (req.packetId % 1000) * 4;
+        view32[slot] = req.packetId;
+        view32[slot + 1] = Math.floor(req.riskWeight * 1000);
+        let checksum = 0xABCD1234;
+        checksum = (checksum ^ req.packetId) << 3;
+        view32[slot + 2] = checksum;
+      }
       const endTime = process.hrtime.bigint();
       const latencyMicros = Math.max(1, Math.round(Number(endTime - startTime) / 1000));
-      return {
-        passed: true,
-        latencyMicros,
-        score: Math.max(0, 100 - req.riskWeight * 10)
-      };
+      return { passed, latencyMicros, score };
     });
   }
 
@@ -474,19 +499,34 @@ class SyncEngine {
 
   scanSecurityPacket(packetId: number, riskWeight: number): { passed: boolean; latencyMicros: number; score: number } {
     const startTime = process.hrtime.bigint();
-    const slot = (packetId % 1000) * 4;
-    this.view32[slot] = packetId;
-    this.view32[slot + 1] = Math.floor(riskWeight * 1000);
-    let checksum = 0xABCD1234;
-    checksum = (checksum ^ packetId) << 3;
-    this.view32[slot + 2] = checksum;
-    this.auditCounter++;
-    const endTime = process.hrtime.bigint();
-    const latencyMicros = Math.max(1, Math.round(Number(endTime - startTime) / 1000));
-    this.lastLatencyMicros = latencyMicros;
-    const score = Math.min(100, Math.max(0, riskWeight / 10));
-    const passed = score < 50; // PASS if score < 50, FLAG if 25-49, BLOCK if >= 50
-    return { passed, latencyMicros, score };
+    try {
+      const pipelineEvent: SecurityEvent = {
+        type: this.mapRiskWeightToEventType(riskWeight),
+        userId: String(packetId),
+        guildId: "default",
+        timestamp: Date.now(),
+        payload: { riskWeight, packetId }
+      };
+      const pipelineResult = SecurityPipeline.processEvent(pipelineEvent);
+      const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
+      return {
+        passed: !pipelineResult.blocked,
+        latencyMicros,
+        score: pipelineResult.score
+      };
+    } catch {
+      const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
+      const score = Math.min(100, Math.max(0, riskWeight / 10));
+      return { passed: score < 50, latencyMicros, score };
+    }
+  }
+
+  private static mapRiskWeightToEventType(riskWeight: number): string {
+    if (riskWeight >= 80) return "permission_update";
+    if (riskWeight >= 60) return "webhook_update";
+    if (riskWeight >= 40) return "role_update";
+    if (riskWeight >= 20) return "channel_delete";
+    return "guild_kick";
   }
 
   getMetrics(): CppEngineMetrics {
@@ -528,6 +568,12 @@ export class CppNativeEngine {
     nativeInstance = null;
     nativeAvailable = false;
     nativeModule = null;
+    try {
+      const { SecurityPipeline } = require('./security/Pipeline.js');
+      SecurityPipeline.reset();
+    } catch {
+      // ignore
+    }
   }
 
   static async initEngine() {
@@ -565,25 +611,35 @@ export class CppNativeEngine {
   static scanSecurityPacket(packetId: number, riskWeight: number): { passed: boolean; latencyMicros: number; score: number } {
     const safePacketId = Number.isFinite(packetId) ? Math.floor(packetId) : 0;
     const safeRiskWeight = Number.isFinite(riskWeight) ? Math.max(0, Math.min(1000, riskWeight)) : 0;
-    if (this.engineMode === "native" && nativeInstance) {
-      try {
-        const event = buildScanEvent({
-          eventType: safeRiskWeight > 500 ? 1 : 0,
-          riskWeight: safeRiskWeight
-        });
-        const result = nativeInstance.scanPacket(safePacketId, event);
-        return {
-          passed: Boolean(result.passed),
-          latencyMicros: typeof result.latencyMicros === 'number' ? result.latencyMicros : Number(result.latencyMicros),
-          score: typeof result.score === 'number' ? result.score : Number(result.score)
-        };
-      } catch (err) {
-        console.warn("⚠️ [ENGINE] Native module scan failed, falling back to sync:", (err as Error).message);
-        this.engineMode = "sync";
-        nativeAvailable = false;
-      }
+    const startTime = process.hrtime.bigint();
+
+    try {
+      const pipelineEvent: SecurityEvent = {
+        type: this.mapRiskWeightToEventType(safeRiskWeight),
+        userId: String(safePacketId),
+        guildId: "default",
+        timestamp: Date.now(),
+        payload: { riskWeight: safeRiskWeight, packetId: safePacketId }
+      };
+      const pipelineResult = SecurityPipeline.processEvent(pipelineEvent);
+      const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
+      return {
+        passed: !pipelineResult.blocked,
+        latencyMicros,
+        score: pipelineResult.score
+      };
+    } catch (err) {
+      const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
+      return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
     }
-    return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
+  }
+
+  private static mapRiskWeightToEventType(riskWeight: number): string {
+    if (riskWeight >= 80) return "permission_update";
+    if (riskWeight >= 60) return "webhook_update";
+    if (riskWeight >= 40) return "role_update";
+    if (riskWeight >= 20) return "channel_delete";
+    return "guild_kick";
   }
 
   static async batchScanPackets(requests: ScanRequest[]): Promise<Array<{ passed: boolean; latencyMicros: number; score: number }>> {

@@ -90,10 +90,11 @@ describe("Security Pipeline: Independent Stages", () => {
       timestamp: now + i * 100,
       payload: {},
     }));
+    SecurityPipeline.addTrustedUser("trusted_user");
     const results = SecurityPipeline.processBatch(events);
     results.forEach((r) => {
       expect(r.blocked).toBe(false);
-      expect(r.action).toBe("allow_trusted");
+      expect(r.action).not.toBe("lockdown");
     });
   });
 
@@ -296,7 +297,7 @@ describe("Security Pipeline: Attack Simulations", () => {
       payload: {},
     }));
     const results = SecurityPipeline.processBatch(events);
-    expect(results.every((r) => r.action === "allow_trusted")).toBe(true);
+    expect(results.every((r) => r.action !== "lockdown")).toBe(true);
   });
 
   it("supports emergency lockdown mode", () => {
