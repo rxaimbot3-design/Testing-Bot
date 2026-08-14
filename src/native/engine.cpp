@@ -300,7 +300,6 @@ public:
     std::sort(copy.begin(), copy.end());
     size_t idx = static_cast<size_t>(std::ceil(p / 100.0 * copy.size()) - 1);
     if (idx >= copy.size()) idx = copy.size() - 1;
-    if (idx < 0) idx = 0;
     return static_cast<double>(copy[idx]);
   }
 
@@ -519,9 +518,7 @@ Napi::Object SecurityEngine::Init(Napi::Env env, Napi::Object exports) {
 
   Napi::FunctionReference* ctor = new Napi::FunctionReference();
   *ctor = Napi::Persistent(func);
-  env.SetInstanceData(ctor, [](Napi::Env, void* data) {
-    delete static_cast<Napi::FunctionReference*>(data);
-  });
+  env.SetInstanceData(ctor);
 
   exports.Set("SecurityEngine", func);
   return exports;
