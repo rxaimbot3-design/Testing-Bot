@@ -1,5 +1,7 @@
 # Benchmark Results
 
+**Important:** The distributable source ZIP does not include the compiled `security_engine.node` binary. The results below were generated on a separately compiled native build. In environments without the compiled binary, the engine falls back to the worker-thread or sync path, which has different performance characteristics.
+
 Generated: 2026-08-13T08:10:00.000Z
 
 Environment:
@@ -8,6 +10,18 @@ Environment:
 - Platform: linux
 - Engine Mode: native
 - Benchmark method: 3 warmup runs + 10 measured runs per test
+
+## Scope
+
+These benchmarks measure **isolated native C++ security-engine throughput** under synthetic load. They do **not** represent end-to-end Discord bot throughput, which includes:
+- Discord Gateway event ingestion
+- discord.js message dispatch
+- Event normalization and enrichment
+- Security pipeline evaluation
+- Discord API rate-limit handling
+- Database/Redis I/O
+
+> **Do not market these numbers as "bot protects X Discord events/sec."** They are native engine benchmarks only.
 
 ## Summary (10 measured runs, statistical summary)
 

@@ -663,12 +663,18 @@ Napi::Value SecurityEngine::ScanBatch(const Napi::CallbackInfo& info) {
       return info.Env().Null();
     }
     Napi::Object obj = item.As<Napi::Object>();
-    if (!obj.Has("packetId")) {
-      Napi::TypeError::New(info.Env(), "Missing packetId in item")
+    if (!obj.Has("packetId") || !obj.Get("packetId").IsNumber()) {
+      Napi::TypeError::New(info.Env(), "Missing or non-numeric packetId in item")
         .ThrowAsJavaScriptException();
       return info.Env().Null();
     }
-    packet_ids.push_back(obj.Get("packetId").As<Napi::Number>().Uint32Value());
+    uint32_t packet_id_val = obj.Get("packetId").As<Napi::Number>().Uint32Value();
+    if (packet_id_val == 0) {
+      Napi::RangeError::New(info.Env(), "packetId must be > 0")
+        .ThrowAsJavaScriptException();
+      return info.Env().Null();
+    }
+    packet_ids.push_back(packet_id_val);
     event_objs.push_back(obj);
   }
 
