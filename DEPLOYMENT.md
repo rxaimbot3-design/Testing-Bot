@@ -165,7 +165,7 @@ npm install -g pm2
 module.exports = {
   apps: [{
     name: 'discord-bot',
-    script: 'server-build/server.cjs',
+    script: 'server-build/server.mjs',
     instances: 'max',
     exec_mode: 'cluster',
     env: {
@@ -208,7 +208,7 @@ After=network.target redis.service
 Type=simple
 User=botuser
 WorkingDirectory=/opt/discord-bot
-ExecStart=/usr/bin/node server-build/server.cjs
+ExecStart=/usr/bin/node server-build/server.mjs
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production

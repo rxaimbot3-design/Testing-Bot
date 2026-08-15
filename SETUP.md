@@ -106,7 +106,7 @@ npm start
 - Set `ADMIN_SECRET` (32+ chars) in your hosting provider's environment variables.
 - Set `ALLOWED_ORIGIN` or `APP_URL` to your dashboard domain for CORS restriction.
 - Enable Privileged Gateway Intents in Discord Developer Portal.
-- Run with `node server-build/server.cjs` (do NOT run `server.ts` directly in production).
+- Run with `node server-build/server.mjs` (do NOT run `server.ts` directly in production).
 
 ---
 

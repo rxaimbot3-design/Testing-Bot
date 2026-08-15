@@ -3,6 +3,20 @@ import { MongoRedisEngine } from "../SecurityFeatures.js";
 const LOCAL_FALLBACK_MAX_ENTRIES = 10000;
 const LOCAL_FALLBACK_CLEANUP_MS = 5 * 60 * 1000;
 
+const RATE_LIMIT_LUA_SCRIPT = `
+  local key = KEYS[1]
+  local windowStart = tonumber(ARGV[1])
+  local now = tonumber(ARGV[2])
+  local ttlSec = tonumber(ARGV[3])
+  local member = ARGV[4]
+
+  redis.call('ZREMRANGEBYSCORE', key, '-inf', windowStart)
+  redis.call('ZADD', key, now, member)
+  redis.call('EXPIRE', key, ttlSec)
+  local count = redis.call('ZCARD', key)
+  return count
+`;
+
 export class RedisRateLimiter {
   private static redisAvailable: boolean = false;
   private static localRequests = new Map<string, number[]>();
@@ -45,12 +59,10 @@ export class RedisRateLimiter {
         const now = Date.now();
         const windowStart = now - windowMs;
         const redisKey = `ratelimit:${key}`;
+        const ttlSec = Math.ceil(windowMs / 1000);
+        const member = `${now}:${Math.random()}`;
 
-        await client.zRemRangeByScore(redisKey, 0, windowStart);
-        await client.zAdd(redisKey, { score: now, value: `${now}:${Math.random()}` });
-        await client.expire(redisKey, Math.ceil(windowMs / 1000));
-
-        const count = await client.zCard(redisKey);
+        const count = await client.eval(RATE_LIMIT_LUA_SCRIPT, 1, redisKey, windowStart, now, ttlSec, member) as number;
         return count < maxRequests;
       } catch {
         this.redisAvailable = false;

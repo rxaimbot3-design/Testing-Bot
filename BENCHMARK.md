@@ -242,7 +242,7 @@ wrk -t4 -c100 -d30s -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 # Start with profiling
-node --cpu-prof server-build/server.cjs
+node --cpu-prof server-build/server.mjs
 
 # Process profile
 node --prof-process isolate-*.log > processed.txt
@@ -252,7 +252,7 @@ node --prof-process isolate-*.log > processed.txt
 
 ```bash
 # Start with inspector
-node --inspect server-build/server.cjs
+node --inspect server-build/server.mjs
 
 # Connect Chrome DevTools to http://localhost:9229
 ```

@@ -126,7 +126,7 @@
 
 2. **Check for memory leaks**
    ```bash
-   node --inspect server-build/server.cjs
+    node --inspect server-build/server.mjs
    # Take heap snapshots and compare
    ```
 
@@ -145,7 +145,7 @@
    ```bash
    chmod 755 data backups snapshots logs
    chmod 600 .env
-   chmod 644 server-build/server.cjs
+    chmod 644 server-build/server.mjs
    ```
 
 2. **Check directory ownership**
@@ -262,12 +262,12 @@
 
 2. **Enable worker clustering**
    ```bash
-   pm2 start server-build/server.cjs -i max
+    pm2 start server-build/server.mjs -i max
    ```
 
 3. **Profile CPU usage**
    ```bash
-   node --cpu-prof server-build/server.cjs
+    node --cpu-prof server-build/server.mjs
    ```
 
 ### High Memory Usage

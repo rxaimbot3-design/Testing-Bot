@@ -29,8 +29,8 @@
           "cflags_cc": [ "-O3", "-DNDEBUG", "-fomit-frame-pointer" ],
           "conditions": [
             ["target_arch=='x64'", {
-              "cflags": [ "-msse4.2", "-mavx2", "-mfma" ],
-              "cflags_cc": [ "-msse4.2", "-mavx2", "-mfma" ]
+              "cflags": [ "-msse4.2" ],
+              "cflags_cc": [ "-msse4.2" ]
             }]
           ]
         },

@@ -26,7 +26,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install ALL dependencies including devDependencies for build
-RUN npm ci --no-audit --no-fund --production=false || npm install --no-audit --no-fund --legacy-peer-deps
+RUN npm ci --no-audit --no-fund --production=false
 
 # Copy source code
 COPY . .
@@ -65,6 +65,7 @@ COPY --from=builder --chown=appuser:appuser /app/server-build ./server-build
 COPY --from=builder --chown=appuser:appuser /app/dist ./dist
 COPY --from=builder --chown=appuser:appuser /app/public ./public
 COPY --from=builder --chown=appuser:appuser /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:appuser /app/build ./build
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/data /app/backups /app/snapshots /app/logs /app/audit_logs && \
@@ -81,4 +82,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Start the application
-CMD ["node", "server-build/server.cjs"]
+CMD ["node", "server-build/server.mjs"]
