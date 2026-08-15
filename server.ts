@@ -319,18 +319,16 @@ async function revokeAdminSessionByToken(token: string) {
 }
 
 async function revokeAllAdminSessions() {
+  const keysToDelete: string[] = [];
+  for (const tokenHash of activeAdminSessions.keys()) {
+    keysToDelete.push(getRedisSessionKey(tokenHash));
+  }
   activeAdminSessions.clear();
-  if (MongoRedisEngine.isRedisConnected) {
+  if (MongoRedisEngine.isRedisConnected && keysToDelete.length > 0) {
     try {
       const client = MongoRedisEngine['redisClient'];
       if (client) {
-        const keys: string[] = [];
-        for (const tokenHash of activeAdminSessions.keys()) {
-          keys.push(getRedisSessionKey(tokenHash));
-        }
-        if (keys.length > 0) {
-          await client.del(keys);
-        }
+        await client.del(keysToDelete);
       }
     } catch {
       // ignore

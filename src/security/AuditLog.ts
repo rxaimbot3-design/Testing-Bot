@@ -21,6 +21,9 @@ export class AuditLogQueue {
   private currentLogFile: string;
   private currentSize: number = 0;
   private readonly maxLogSize: number = 10 * 1024 * 1024; // 10MB
+  private rotationCounter: number = 0;
+  private emergencyFallbackPath: string;
+  private overflowDroppedCount: number = 0;
 
   constructor(options: {
     logDir?: string;
@@ -43,8 +46,30 @@ export class AuditLogQueue {
       console.warn(`[AUDIT LOG] Cannot create log directory '${this.logDir}':`, (err as Error).message);
       this.logDir = "";
     }
+    this.emergencyFallbackPath = this.logDir ? path.join(this.logDir, "audit_overflow.json") : "";
     this.currentLogFile = this.getLogFilePath();
     this.currentSize = this.getActualFileSize(this.currentLogFile);
+    this.rotationCounter = this.detectExistingRotations();
+  }
+
+  private detectExistingRotations(): number {
+    if (!this.logDir) return 0;
+    try {
+      const entries = fs.readdirSync(this.logDir);
+      const baseName = path.basename(this.currentLogFile, ".json");
+      const regex = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:_(\\d+))?\\.json$`);
+      let maxCounter = 0;
+      for (const entry of entries) {
+        const match = entry.match(regex);
+        if (match && match[1]) {
+          const num = parseInt(match[1], 10);
+          if (num > maxCounter) maxCounter = num;
+        }
+      }
+      return maxCounter;
+    } catch {
+      return 0;
+    }
   }
 
   private getActualFileSize(filePath: string): number {
@@ -68,11 +93,33 @@ export class AuditLogQueue {
     this.queue.push(fullEvent);
 
     if (this.queue.length >= this.maxQueueSize) {
-      this.queue.shift(); // Drop oldest
+      this.queue.shift();
+      this.overflowDroppedCount++;
+      this.writeOverflowMetric();
     }
 
     if (this.queue.length >= this.maxBatchSize) {
       this.flush();
+    }
+  }
+
+  private writeOverflowMetric(): void {
+    if (!this.emergencyFallbackPath) return;
+    try {
+      const metric = {
+        timestamp: new Date().toISOString(),
+        type: "overflow",
+        totalDropped: this.overflowDroppedCount,
+        currentQueueSize: this.queue.length
+      };
+      const existing = fs.existsSync(this.emergencyFallbackPath)
+        ? JSON.parse(fs.readFileSync(this.emergencyFallbackPath, "utf8"))
+        : [];
+      existing.push(metric);
+      if (existing.length > 1000) existing.splice(0, existing.length - 1000);
+      atomicWriteJsonSync(this.emergencyFallbackPath, existing);
+    } catch {
+      // ignore overflow metric errors
     }
   }
 
@@ -109,7 +156,6 @@ export class AuditLogQueue {
       this.currentSize += JSON.stringify(batch).length;
     } catch (err) {
       console.error("[AUDIT LOG] Failed to write batch:", err);
-      // Re-queue failed batch (but limit requeue to prevent infinite loop)
       if (this.queue.length < this.maxQueueSize) {
         this.queue.unshift(...batch);
       }
@@ -122,11 +168,18 @@ export class AuditLogQueue {
     return path.join(this.logDir, `audit_${date}.json`);
   }
 
+  private getRotatedLogFilePath(): string {
+    if (!this.logDir) return "";
+    const date = new Date().toISOString().slice(0, 10);
+    this.rotationCounter++;
+    return path.join(this.logDir, `audit_${date}_${this.rotationCounter}.json`);
+  }
+
   private rotateLogIfNeeded(): void {
     if (!this.logDir) return;
     const currentSize = this.getActualFileSize(this.currentLogFile);
     if (currentSize >= this.maxLogSize) {
-      this.currentLogFile = this.getLogFilePath();
+      this.currentLogFile = this.getRotatedLogFilePath();
       this.currentSize = 0;
     } else {
       this.currentSize = currentSize;
