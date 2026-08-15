@@ -44,6 +44,19 @@ export class AuditLogQueue {
       this.logDir = "";
     }
     this.currentLogFile = this.getLogFilePath();
+    this.currentSize = this.getActualFileSize(this.currentLogFile);
+  }
+
+  private getActualFileSize(filePath: string): number {
+    if (!this.logDir || !filePath) return 0;
+    try {
+      if (fs.existsSync(filePath)) {
+        return fs.statSync(filePath).size;
+      }
+    } catch {
+      // ignore stat errors
+    }
+    return 0;
   }
 
   enqueue(event: Omit<AuditEvent, "timestamp">): void {
@@ -111,14 +124,7 @@ export class AuditLogQueue {
 
   private rotateLogIfNeeded(): void {
     if (!this.logDir) return;
-    let currentSize = 0;
-    try {
-      if (fs.existsSync(this.currentLogFile)) {
-        currentSize = fs.statSync(this.currentLogFile).size;
-      }
-    } catch {
-      // ignore stat errors
-    }
+    const currentSize = this.getActualFileSize(this.currentLogFile);
     if (currentSize >= this.maxLogSize) {
       this.currentLogFile = this.getLogFilePath();
       this.currentSize = 0;

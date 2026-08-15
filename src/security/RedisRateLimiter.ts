@@ -6,7 +6,7 @@ export class RedisRateLimiter {
   static async init(): Promise<void> {
     try {
       await MongoRedisEngine.initRedis();
-      this.redisAvailable = MongoRedisEngine.isRedisAvailable();
+      this.redisAvailable = MongoRedisEngine.isRedisConnected;
     } catch {
       this.redisAvailable = false;
     }

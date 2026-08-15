@@ -202,11 +202,73 @@ function checkSessionReplay(token: string): boolean {
   return false;
 }
 
-// Active Admin Sessions Store (With Disk Persistence - Hashed Tokens)
+// Active Admin Sessions Store (Multi-Instance: Redis-backed with in-memory fallback)
 const activeAdminSessions = new Map<string, { username: string; createdAt: number; expiresAt: number; tokenHash: string }>();
 const SESSIONS_FILE = path.join(process.cwd(), "admin_sessions.json");
+const REDIS_SESSION_PREFIX = "session:admin:";
 
-function loadAdminSessions() {
+function getRedisSessionKey(tokenHash: string): string {
+  return `${REDIS_SESSION_PREFIX}${tokenHash}`;
+}
+
+async function redisGetSession(tokenHash: string): Promise<{ username: string; createdAt: number; expiresAt: number; tokenHash: string } | null> {
+  try {
+    const client = MongoRedisEngine['redisClient'];
+    if (!client || !MongoRedisEngine.isRedisConnected) return null;
+    const raw = await client.get(getRedisSessionKey(tokenHash));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function redisSetSession(tokenHash: string, session: { username: string; createdAt: number; expiresAt: number; tokenHash: string }, ttlSec: number): Promise<void> {
+  try {
+    const client = MongoRedisEngine['redisClient'];
+    if (!client || !MongoRedisEngine.isRedisConnected) return;
+    await client.setEx(getRedisSessionKey(tokenHash), ttlSec, JSON.stringify(session));
+  } catch {
+    // silently fallback to in-memory
+  }
+}
+
+async function redisDelSession(tokenHash: string): Promise<void> {
+  try {
+    const client = MongoRedisEngine['redisClient'];
+    if (!client || !MongoRedisEngine.isRedisConnected) return;
+    await client.del(getRedisSessionKey(tokenHash));
+  } catch {
+    // silently fallback to in-memory
+  }
+}
+
+async function syncSessionsToRedis(): Promise<void> {
+  if (!MongoRedisEngine.isRedisConnected) return;
+  const ttlSec = 24 * 60 * 60;
+  for (const [tokenHash, session] of activeAdminSessions.entries()) {
+    await redisSetSession(tokenHash, session, ttlSec);
+  }
+}
+
+async function getGitHubToken(): Promise<string> {
+  if (process.env.GITHUB_TOKEN) {
+    return process.env.GITHUB_TOKEN;
+  }
+  try {
+    return TokenVault.retrieve("GITHUB_TOKEN") || "";
+  } catch {
+    return "";
+  }
+}
+
+async function setGitHubToken(token: string): Promise<void> {
+  if (!token) return;
+  TokenVault.store(token, "GITHUB_TOKEN");
+  process.env.GITHUB_TOKEN = token;
+}
+
+async function loadAdminSessions() {
   try {
     if (fs.existsSync(SESSIONS_FILE)) {
       const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf-8"));
@@ -222,9 +284,12 @@ function loadAdminSessions() {
   } catch (err) {
     console.error("Failed to load admin sessions from disk:", err);
   }
+  if (MongoRedisEngine.isRedisConnected) {
+    syncSessionsToRedis().catch(() => {});
+  }
 }
 
-function saveAdminSessions() {
+async function saveAdminSessions() {
   try {
     const list = Array.from(activeAdminSessions.values()).map(sess => ({ tokenHash: sess.tokenHash, username: sess.username, createdAt: sess.createdAt, expiresAt: sess.expiresAt }));
     atomicWriteJsonSync(SESSIONS_FILE, list);
@@ -233,42 +298,64 @@ function saveAdminSessions() {
   }
 }
 
-function createAdminSession(username: string): { token: string; expiresAt: number } {
+async function createAdminSession(username: string): Promise<{ token: string; expiresAt: number }> {
   const token = "session_" + crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-  activeAdminSessions.set(tokenHash, { username, createdAt: Date.now(), expiresAt, tokenHash });
+  const session = { username, createdAt: Date.now(), expiresAt, tokenHash };
+  activeAdminSessions.set(tokenHash, session);
+  await redisSetSession(tokenHash, session, 24 * 60 * 60);
   saveAdminSessions();
   return { token, expiresAt };
 }
 
-function revokeAdminSessionByToken(token: string) {
+async function revokeAdminSessionByToken(token: string) {
   if (!token) return false;
   const tokenHash = hashToken(token);
-  return activeAdminSessions.delete(tokenHash);
+  const deleted = activeAdminSessions.delete(tokenHash);
+  await redisDelSession(tokenHash);
+  saveAdminSessions();
+  return deleted;
 }
 
-function revokeAllAdminSessions() {
+async function revokeAllAdminSessions() {
   activeAdminSessions.clear();
+  if (MongoRedisEngine.isRedisConnected) {
+    try {
+      const client = MongoRedisEngine['redisClient'];
+      if (client) {
+        const keys: string[] = [];
+        for (const tokenHash of activeAdminSessions.keys()) {
+          keys.push(getRedisSessionKey(tokenHash));
+        }
+        if (keys.length > 0) {
+          await client.del(keys);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
   saveAdminSessions();
 }
 
 loadAdminSessions();
 
 // Cleanup expired sessions every 10 minutes
-setInterval(() => {
+setInterval(async () => {
   const now = Date.now();
   let changed = false;
   for (const [tokenHash, session] of activeAdminSessions.entries()) {
     if (session.expiresAt <= now) {
       activeAdminSessions.delete(tokenHash);
+      await redisDelSession(tokenHash);
       changed = true;
     }
   }
   if (changed) saveAdminSessions();
 }, 10 * 60 * 1000);
 
-function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+async function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   try {
     const authHeader = (req.headers["authorization"] || req.headers["x-admin-key"] || "") as string;
     const cookieToken = req.cookies?.admin_session_token || "";
@@ -288,12 +375,22 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
     // Replay protection for session tokens removed to allow parallel dashboard requests.
     // Session security is maintained via hashed server-side storage and 24h expiry.
 
-    // Active Session Token match (hashed lookup)
+    // Active Session Token match (hashed lookup) - Redis-first for multi-instance
     const tokenHash = hashToken(tokenStr);
-    const session = activeAdminSessions.get(tokenHash);
+    let session = activeAdminSessions.get(tokenHash);
+
+    if (!session && MongoRedisEngine.isRedisConnected) {
+      const redisSession = await redisGetSession(tokenHash);
+      if (redisSession) {
+        activeAdminSessions.set(tokenHash, redisSession);
+        session = redisSession;
+      }
+    }
+
     if (session) {
       if (Date.now() > session.expiresAt) {
         activeAdminSessions.delete(tokenHash);
+        await redisDelSession(tokenHash);
         saveAdminSessions();
         return res.status(401).json({ success: false, error: "Unauthorized: Session token has expired." });
       }
@@ -316,7 +413,7 @@ class RateLimiterMiddleware {
   static async initRedis(): Promise<void> {
     try {
       await MongoRedisEngine.initRedis();
-      RateLimiterMiddleware.redisAvailable = MongoRedisEngine.isRedisAvailable();
+      RateLimiterMiddleware.redisAvailable = MongoRedisEngine.isRedisConnected;
     } catch {
       RateLimiterMiddleware.redisAvailable = false;
     }
@@ -917,7 +1014,7 @@ app.post("/api/auth/discord/login", RateLimiterMiddleware.limit(60000, 10, "logi
       return res.status(403).json({ success: false, error: "Unauthorized Discord Account. You are not a server owner." });
     }
 
-    const { token: sessionToken, expiresAt } = createAdminSession(userData.username);
+    const { token: sessionToken, expiresAt } = await createAdminSession(userData.username);
 
     res.cookie("admin_session_token", sessionToken, {
       httpOnly: true,
@@ -935,7 +1032,7 @@ app.post("/api/auth/discord/login", RateLimiterMiddleware.limit(60000, 10, "logi
   }
 });
 
-app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), (req, res) => {
+app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), async (req, res) => {
   try {
     const validation = validateInput({ adminKey: { required: true, type: "string", minLength: 1, maxLength: 200 } }, req.body);
     if (!validation.valid) {
@@ -952,7 +1049,7 @@ app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), (re
     const secretMatches = inputKey && validSecret && inputKey.length === validSecret.length && crypto.timingSafeEqual(Buffer.from(inputKey), Buffer.from(validSecret));
 
     if (secretMatches) {
-      const { token: sessionToken, expiresAt } = createAdminSession("Admin");
+      const { token: sessionToken, expiresAt } = await createAdminSession("Admin");
 
       res.cookie("admin_session_token", sessionToken, {
         httpOnly: true,
@@ -980,7 +1077,7 @@ app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), (re
   }
 });
 
-app.get("/api/auth/session", (req, res) => {
+app.get("/api/auth/session", async (req, res) => {
   try {
     const clientIp = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
 
@@ -994,7 +1091,16 @@ app.get("/api/auth/session", (req, res) => {
     }
 
     const tokenHash = hashToken(tokenStr);
-    const session = activeAdminSessions.get(tokenHash);
+    let session = activeAdminSessions.get(tokenHash);
+
+    if (!session && MongoRedisEngine.isRedisConnected) {
+      const redisSession = await redisGetSession(tokenHash);
+      if (redisSession) {
+        activeAdminSessions.set(tokenHash, redisSession);
+        session = redisSession;
+      }
+    }
+
     if (session && Date.now() <= session.expiresAt) {
       return res.json({ authenticated: true, username: session.username, mode: "session-token", clientIp, expiresAt: session.expiresAt });
     }
@@ -2250,6 +2356,7 @@ try {
   if (fs.existsSync("./github_config.json")) {
     const ghcfg = readEncryptedConfig("./github_config.json");
     if (ghcfg?.token) {
+      TokenVault.store(ghcfg.token, "GITHUB_TOKEN");
       process.env.GITHUB_TOKEN = ghcfg.token;
     }
     if (ghcfg?.repo) {
@@ -2260,21 +2367,22 @@ try {
   console.error("Failed to load github_config.json:", e);
 }
 
-app.get("/api/github/status", requireAdminAuth, (req, res) => {
+app.get("/api/github/status", requireAdminAuth, async (req, res) => {
   const port = process.env.PORT || 3000;
   const appUrl = process.env.APP_URL || process.env.PUBLIC_APP_URL || process.env.RENDER_EXTERNAL_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`);
   const webhookUrl = `${appUrl}/api/github/webhook`;
+  const ghToken = await getGitHubToken();
   res.json({
     configured: true,
     webhookUrl,
     linkedRepo,
-    githubTokenConfigured: !!process.env.GITHUB_TOKEN
+    githubTokenConfigured: !!ghToken
   });
 });
 
 app.get("/api/github/repos", requireAdminAuth, async (req, res) => {
   const customToken = (req.headers["x-github-token"] || "") as string;
-  const token = customToken || process.env.GITHUB_TOKEN;
+  const token = customToken || await getGitHubToken();
 
   if (!token) {
     return res.status(401).json({ error: "GitHub token is required to fetch repositories." });
@@ -2323,11 +2431,12 @@ app.post("/api/github/link-repo", requireAdminAuth, async (req, res) => {
   const { repo } = req.body;
   if (!repo) return res.status(400).json({ error: "No repository name provided" });
   
-  if (process.env.GITHUB_TOKEN) {
+  const ghToken = await getGitHubToken();
+  if (ghToken) {
     try {
       const repoRes = await fetch(`https://api.github.com/repos/${repo}`, {
         headers: {
-          Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+          Authorization: `Bearer ${ghToken}`,
           "User-Agent": "AI-Studio-Applet",
           "Accept": "application/vnd.github.v3+json"
         }
@@ -2343,7 +2452,7 @@ app.post("/api/github/link-repo", requireAdminAuth, async (req, res) => {
   linkedRepo = repo;
   try {
     writeEncryptedConfig("./github_config.json", {
-      token: process.env.GITHUB_TOKEN || "",
+      token: ghToken || "",
       repo: linkedRepo
     });
   } catch (e) {
@@ -2379,7 +2488,7 @@ app.post("/api/github/save-token", requireAdminAuth, async (req, res) => {
 
     const userData = await userRes.json();
 
-    process.env.GITHUB_TOKEN = cleanToken;
+    await setGitHubToken(cleanToken);
     try {
       writeEncryptedConfig("./github_config.json", {
         token: cleanToken,
@@ -2407,7 +2516,7 @@ app.post("/api/github/save-token", requireAdminAuth, async (req, res) => {
 app.post("/api/github/create-repo", requireAdminAuth, async (req, res) => {
   const { name, description, isPrivate } = req.body || {};
   const customToken = (req.headers["x-github-token"] || "") as string;
-  const token = customToken || process.env.GITHUB_TOKEN;
+  const token = customToken || await getGitHubToken();
 
   if (!name) {
     return res.status(400).json({ error: "Repository name is required" });
@@ -2480,7 +2589,7 @@ function sanitizeGitError(errMessage: string): string {
 app.post("/api/github/push", requireAdminAuth, async (req, res) => {
   const { repo, commitMessage, branch = "main" } = req.body || {};
   const customToken = (req.headers["x-github-token"] || "") as string;
-  const token = customToken || process.env.GITHUB_TOKEN;
+  const token = customToken || await getGitHubToken();
   const targetRepo = repo || linkedRepo;
 
   if (!targetRepo) {
