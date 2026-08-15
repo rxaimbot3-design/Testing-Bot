@@ -5890,7 +5890,7 @@ export async function runNukeDefenseDrill() {
     }
   }
 
-  addBotLog(`🎉 [100-NUKER STRESS TEST COMPLETE] Processed 100 attack packets in ${durationMs}ms (Avg Scan Latency: ${avgLatency}μs). Neutralized 100/100 threats.`, "success");
+  addBotLog(`🎉 [100-NUKER STRESS TEST COMPLETE] Processed 100 attack packets in ${durationMs}ms (Avg Scan Latency: ${avgLatency}μs). Passed ${passedCount}/100 signatures.`, "success");
   
   const stats = getSecurityStats();
   return {

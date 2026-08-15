@@ -2299,6 +2299,16 @@ export class PremiumLicenseSystem {
     if (this._isPremiumOverride !== null) return this._isPremiumOverride;
     return this.validateLicense(this.activeLicenseKey);
   }
+
+  static getLicenseExpiry(): string | null {
+    // No expiry tracking in current license format; return null to indicate unavailable
+    return null;
+  }
+
+  static getMaxGuilds(): number | null {
+    // No guild quota enforcement in current license format; return null to indicate unlimited/unavailable
+    return null;
+  }
 }
 
 // 36. Mongo/Redis Enterprise Cache Engine

@@ -1325,7 +1325,7 @@ app.get("/api/enterprise/status", requireAdminAuth, (req, res) => {
     ],
     zeroDowntimeRestartAvailable: true,
     hotReloadAvailable: true,
-    dbReplicationLagMs: 0,
+    dbReplicationLagMs: null, // Set to actual value if using database replication monitoring
     lastBackupTime: new Date().toLocaleTimeString()
   });
 });
@@ -1333,7 +1333,7 @@ app.get("/api/enterprise/status", requireAdminAuth, (req, res) => {
 app.post("/api/enterprise/zero-downtime-restart", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   logAdminAuditAction("ZERO_DOWNTIME_RESTART", req);
   const startTime = Date.now();
-  addBotLog("[ENTERPRISE] Initiating real Zero-Downtime State Persistence & Subsystem Reload...", "info");
+  addBotLog("[ENTERPRISE] Initiating HTTP-service-preserving bot subsystem reload...", "info");
   
   try {
     // 1. Reload & sync IP Ban state from disk
@@ -1350,20 +1350,20 @@ app.post("/api/enterprise/zero-downtime-restart", requireAdminAuth, heavyOpRateL
       try {
         await stopDiscordBot();
         await startDiscordBot();
-        addBotLog("✅ [ENTERPRISE] Zero-Downtime Hot Restart completed successfully.", "success");
+        addBotLog("✅ [ENTERPRISE] HTTP-service-preserving bot restart completed.", "success");
       } catch (e: any) {
-        addBotLog(`⚠️ [ENTERPRISE] Hot restart error: ${e.message}`, "error");
+        addBotLog(`❌ [ENTERPRISE] Bot restart failed: ${e.message}`, "error");
       }
-    }, 200);
-
-    const elapsed = Date.now() - startTime;
-    res.json({
-      success: true,
-      message: `Zero-Downtime cluster restart executed in ${elapsed}ms. Active HTTP sessions preserved.`,
-      reloadedModules: ["EnvScanner", "IPBanSystem", "CppNativeEngine", "DiscordBotClient"]
+    }, 500);
+    
+    res.json({ 
+      success: true, 
+      message: "HTTP server remains online. Discord bot connection restart initiated in background.",
+      note: "This preserves the dashboard/API while refreshing the Discord gateway connection."
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: "Internal server error" });
+    addBotLog(`❌ [ENTERPRISE] Restart sequence failed: ${err.message}`, "error");
+    res.status(500).json({ success: false, error: "Restart failed" });
   }
 });
 
@@ -1562,7 +1562,7 @@ app.post("/api/bot/simulate-100-nukers", requireAdminAuth, async (req, res) => {
     const stats = await runNukeDefenseDrill();
     res.json({
       success: true,
-      message: "Run 100 simultaneous advanced nukers stress test drill. 100% neutralized!",
+      message: "Simulated 100 attack vector signatures processed through security engine.",
       stats
     });
   } catch (err: any) {
@@ -2321,6 +2321,8 @@ app.get("/api/premium/info", requireAdminAuth, (req, res) => {
     isPremium: PremiumLicenseSystem.isPremium,
     licenseKey: PremiumLicenseSystem.activeLicenseKey ? "PREMIUM-****-****" : null,
     hardwareFingerprint: PremiumLicenseSystem.getHardwareFingerprint(),
+    expiresAt: PremiumLicenseSystem.getLicenseExpiry ? PremiumLicenseSystem.getLicenseExpiry() : null,
+    maxGuilds: PremiumLicenseSystem.getMaxGuilds ? PremiumLicenseSystem.getMaxGuilds() : null,
     updateChecker: {
       currentVersion: "v4.8.2-ULTRA",
       latestVersion: "v4.8.2-ULTRA",

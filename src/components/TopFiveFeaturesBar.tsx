@@ -27,6 +27,7 @@ export default function TopFiveFeaturesBar() {
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [oauthStatus, setOauthStatus] = useState<any>(null);
   const [shardingStatus, setShardingStatus] = useState<any>(null);
+  const [securityStats, setSecurityStats] = useState<{ blockedAttacksCount: number } | null>(null);
   const [isScanningOAuth, setIsScanningOAuth] = useState(false);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -52,6 +53,13 @@ export default function TopFiveFeaturesBar() {
       if (resShard.ok) {
         const dataShard = await resShard.json();
         setShardingStatus(dataShard);
+      }
+
+      // 4. Security Stats
+      const resSec = await apiFetch('/api/security/ultra-stats');
+      if (resSec.ok) {
+        const dataSec = await resSec.json();
+        setSecurityStats({ blockedAttacksCount: dataSec.blockedAttacksCount || 0 });
       }
     } catch (e) {
       // Fail silently for background polls
@@ -255,7 +263,7 @@ export default function TopFiveFeaturesBar() {
               </span>
             </div>
             <div className="text-xl font-black text-white mb-1">
-              142 <span className="text-xs font-normal text-zinc-400">Threats Blocked</span>
+              {securityStats?.blockedAttacksCount ?? 0} <span className="text-xs font-normal text-zinc-400">Threats Blocked</span>
             </div>
             <p className="text-[10px] text-zinc-400">
               Real-time attack timeline, join heatmap & threat intelligence feed.
@@ -263,7 +271,7 @@ export default function TopFiveFeaturesBar() {
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-800/60 text-[10px] text-zinc-400 flex items-center justify-between">
             <span>Audit Stream</span>
-            <span className="text-cyan-400 font-bold">0ms Delay</span>
+            <span className="text-cyan-400 font-bold">{shardingStatus?.shards?.[0]?.ping ?? 0}ms</span>
           </div>
         </div>
 
@@ -275,7 +283,7 @@ export default function TopFiveFeaturesBar() {
                 🌍 5. Cluster & Sharding
               </span>
               <span className="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded">
-                4 Shards
+                {shardingStatus?.totalShards || 1} Shard{shardingStatus?.totalShards !== 1 ? 's' : ''}
               </span>
             </div>
             <p className="text-[10px] text-zinc-400 mb-2">
@@ -289,8 +297,10 @@ export default function TopFiveFeaturesBar() {
             </button>
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-800/60 text-[10px] text-zinc-400 flex items-center justify-between">
-            <span>Ping: 16ms</span>
-            <span className="text-purple-400 font-bold">100% Uptime</span>
+            <span>Ping: {shardingStatus?.shards?.[0]?.ping ?? 0}ms</span>
+            <span className="text-purple-400 font-bold">
+              {shardingStatus?.shards?.[0]?.uptimeMinutes ? `${Math.round(shardingStatus.shards[0].uptimeMinutes / 60 * 100) / 100}h uptime` : 'Uptime monitoring'}
+            </span>
           </div>
         </div>
 

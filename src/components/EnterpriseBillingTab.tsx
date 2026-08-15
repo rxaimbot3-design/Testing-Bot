@@ -25,32 +25,59 @@ export default function EnterpriseBillingTab({ onAddLog }: EnterpriseBillingTabP
 
   const [license, setLicense] = useState<LicenseKeyInfo>({
     key: '••••••••••••••••',
-    status: 'active',
-    tier: 'Enterprise Ultra',
-    hwid: 'HWID-FETCHING...',
-    expiresAt: '2028-12-31',
-    maxGuilds: 1000
+    status: 'inactive',
+    tier: 'Standard',
+    hwid: 'HWID-SECURE-NODE',
+    expiresAt: 'N/A',
+    maxGuilds: 0
+  });
+
+  const [analytics, setAnalytics] = useState({
+    monthlyCommands: 0,
+    avgLatencyMs: 0,
+    errorRate: '0.00',
+    uptime: '0.00',
+    securityIncidents: 0
   });
 
   const [inputKey, setInputKey] = useState('');
   const [keyValidationMsg, setKeyValidationMsg] = useState<string | null>(null);
 
   React.useEffect(() => {
-    apiFetch('/api/premium/info')
-      .then(res => res.json())
-      .then(data => {
-        if (data) {
+    const fetchData = async () => {
+      try {
+        const [licenseRes, statsRes] = await Promise.all([
+          apiFetch('/api/premium/info'),
+          apiFetch('/api/security/ultra-stats')
+        ]);
+        
+        if (licenseRes.ok) {
+          const data = await licenseRes.json();
           setLicense({
             key: data.licenseKey ? `${data.licenseKey.substring(0, 8)}••••••••` : '••••••••••••',
             status: data.isPremium ? 'active' : 'inactive',
             tier: data.isPremium ? 'Enterprise Ultra' : 'Standard',
             hwid: data.hardwareFingerprint || 'HWID-SECURE-NODE',
-            expiresAt: '2029-12-31',
-            maxGuilds: 5000
+            expiresAt: data.expiresAt || 'N/A',
+            maxGuilds: data.maxGuilds || 0
           });
         }
-      })
-      .catch(() => {});
+
+        if (statsRes.ok) {
+          const stats = await statsRes.json();
+          setAnalytics({
+            monthlyCommands: stats.totalAuditsProcessed || 0,
+            avgLatencyMs: Math.round(stats.averageLatencyMicroseconds || 0),
+            errorRate: stats.throughputPerSecond ? '0.00' : '0.00',
+            uptime: stats.uptimeSeconds ? ((stats.uptimeSeconds / 86400) * 100).toFixed(2) : '0.00',
+            securityIncidents: stats.blockedCount || 0
+          });
+        }
+      } catch {
+        // Silently fail - defaults will show
+      }
+    };
+    fetchData();
   }, []);
 
   const handleValidateKey = async (e: React.FormEvent) => {
@@ -87,9 +114,10 @@ export default function EnterpriseBillingTab({ onAddLog }: EnterpriseBillingTabP
       generatedAt: new Date().toISOString(),
       licenseTier: license.tier,
       hardwareBinding: license.hwid,
-      monthlyCommands: 142090,
-      uptime: "99.99%",
-      securityIncidents: 0
+      monthlyCommands: analytics.monthlyCommands,
+      avgLatencyMs: analytics.avgLatencyMs,
+      securityIncidents: analytics.securityIncidents,
+      uptime: analytics.uptime
     };
     const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -200,21 +228,21 @@ export default function EnterpriseBillingTab({ onAddLog }: EnterpriseBillingTabP
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#121212] p-5 rounded-xl border border-zinc-800/80 shadow-xs space-y-1">
-              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Monthly Command Throughput</span>
-              <span className="text-3xl font-black text-zinc-100 block">142,090</span>
-              <span className="text-[10px] text-emerald-600 font-bold">↑ 18.4% increase from last month</span>
+              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Total Audits Processed</span>
+              <span className="text-3xl font-black text-zinc-100 block">{analytics.monthlyCommands.toLocaleString()}</span>
+              <span className="text-[10px] text-emerald-600 font-bold">Security events scanned</span>
             </div>
 
             <div className="bg-[#121212] p-5 rounded-xl border border-zinc-800/80 shadow-xs space-y-1">
-              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Average Latency</span>
-              <span className="text-3xl font-black text-zinc-100 block">18ms</span>
-              <span className="text-[10px] text-emerald-600 font-bold">Optimal Gateway Response</span>
+              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Average Scan Latency</span>
+              <span className="text-3xl font-black text-zinc-100 block">{analytics.avgLatencyMs}ms</span>
+              <span className="text-[10px] text-emerald-600 font-bold">Engine response time</span>
             </div>
 
             <div className="bg-[#121212] p-5 rounded-xl border border-zinc-800/80 shadow-xs space-y-1">
-              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">System Error Rate</span>
-              <span className="text-3xl font-black text-zinc-100 block">0.002%</span>
-              <span className="text-[10px] text-emerald-600 font-bold">Zero Crashes (Crash Recovery Active)</span>
+              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Security Incidents</span>
+              <span className="text-3xl font-black text-zinc-100 block">{analytics.securityIncidents.toLocaleString()}</span>
+              <span className="text-[10px] text-emerald-600 font-bold">Threats blocked</span>
             </div>
           </div>
         </div>

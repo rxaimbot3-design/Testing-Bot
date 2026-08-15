@@ -888,9 +888,9 @@ export default function GitHubTab() {
                 <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
                 24/7 Hosting High-Availability Tip:
               </h5>
-              <p className="text-[10px] text-amber-200/80 leading-normal">
-                If hosting on free tier platforms that go to sleep after inactivity, configure <a href="https://cron-job.org/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 font-bold hover:underline">cron-job.org</a> or <a href="https://uptimerobot.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 font-bold hover:underline">UptimeRobot</a> to send a HTTP ping to your app's <code>/api/health</code> endpoint every 5-10 minutes. This guarantees continuous 100% uptime!
-              </p>
+               <p className="text-[10px] text-amber-200/80 leading-normal">
+                 If hosting on free tier platforms that go to sleep after inactivity, configure <a href="https://cron-job.org/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 font-bold hover:underline">cron-job.org</a> or <a href="https://uptimerobot.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-400 font-bold hover:underline">UptimeRobot</a> to send a HTTP ping to your app's <code>/api/health</code> endpoint every 5-10 minutes. This helps prevent platform sleeping and improves uptime reliability.
+               </p>
             </div>
           </div>
         </div>

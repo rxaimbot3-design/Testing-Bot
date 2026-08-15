@@ -13,6 +13,7 @@ import {
   Play,
   Clock
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface SecurityEvent {
   id: string;
@@ -44,50 +45,70 @@ export default function LiveSecurityEventsTab({ onAddLog }: LiveSecurityEventsTa
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
+  const [isLive, setIsLive] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const eventTypes = ['raid', 'spam', 'malware', 'phishing', 'unauthorized_access', 'rate_limit', 'sql_injection', 'xss', 'ddos'];
 
+  const fetchEvents = async () => {
+    try {
+      const res = await apiFetch('/api/admin/audit-logs?limit=50');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const mapped: SecurityEvent[] = data.map((entry: any, idx: number) => ({
+            id: entry.id || `evt-${Date.now()}-${idx}`,
+            type: entry.action || 'security_event',
+            severity: entry.severity || 'medium',
+            timestamp: entry.timestamp || new Date().toISOString(),
+            source: entry.source || 'Backend Audit',
+            description: entry.details || entry.action || 'Security event detected',
+            details: entry.metadata || undefined
+          }));
+          setEvents(mapped);
+          setIsLive(true);
+        }
+      }
+    } catch {
+      setIsLive(false);
+    }
+  };
+
   useEffect(() => {
-    const generateMockEvents = (): SecurityEvent[] => {
-      const types = eventTypes;
-      const severities: SecurityEvent['severity'][] = ['low', 'medium', 'high', 'critical'];
-      const sources = ['Discord Gateway', 'API Endpoint', 'WebSocket', 'Message Scanner', 'Rate Limiter', 'Auth System'];
-      const descriptions: Record<string, string[]> = {
-        raid: ['Mass join detected from IP range', 'Raid pattern identified in channel', 'Coordinated attack attempt blocked'],
-        spam: ['Spam message filtered', 'Duplicate content detected', 'Bot-like behavior flagged'],
-        malware: ['Malicious link blocked', 'Suspicious file attachment quarantined', 'Packer signature detected'],
-        phishing: ['Phishing domain intercepted', 'Fake Discord link identified', 'Credential harvesting attempt blocked'],
-        unauthorized_access: ['Invalid token attempt', 'Brute force login detected', 'Privilege escalation attempt'],
-        rate_limit: ['Rate limit exceeded', 'API abuse detected', 'Request flooding blocked'],
-        sql_injection: ['SQL injection attempt blocked', 'Malicious query pattern detected'],
-        xss: ['XSS payload sanitized', 'Script injection attempt blocked'],
-        ddos: ['DDoS pattern detected', 'Traffic spike from single source', 'Connection flood blocked']
-      };
-
-      return Array.from({ length: 20 }, (_, i) => {
-        const type = types[Math.floor(Math.random() * types.length)];
-        const severity = severities[Math.floor(Math.random() * severities.length)];
-        const descs = descriptions[type] || ['Security event detected'];
-        return {
-          id: `evt-${Date.now()}-${i}`,
-          type,
-          severity,
-          timestamp: new Date(Date.now() - Math.floor(Math.random() * 3600000)).toISOString(),
-          source: sources[Math.floor(Math.random() * sources.length)],
-          description: descs[Math.floor(Math.random() * descs.length)],
-          details: {
-            ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-            userId: `user_${Math.floor(Math.random() * 10000)}`,
-            actionTaken: ['blocked', 'quarantined', 'monitored', 'rate_limited'][Math.floor(Math.random() * 4)],
-            confidence: Math.floor(Math.random() * 30 + 70)
-          }
-        };
-      }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    };
-
-    setEvents(generateMockEvents());
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 5000);
+    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!autoScroll || isPaused || !scrollRef.current) return;
+    scrollRef.current.scrollTop = 0;
+  }, [events, autoScroll, isPaused]);
+
+  const filteredEvents = events.filter(event => {
+    if (filterType !== 'all' && event.type !== filterType) return false;
+    if (filterSeverity !== 'all' && event.severity !== filterSeverity) return false;
+    if (searchQuery && !event.description.toLowerCase().includes(searchQuery.toLowerCase()) && 
+        !event.source.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !event.type.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    
+    const eventTime = new Date(event.timestamp).getTime();
+    const now = Date.now();
+    const ranges: Record<string, number> = { '15m': 15 * 60 * 1000, '1h': 60 * 60 * 1000, '6h': 6 * 60 * 60 * 1000, '24h': 24 * 60 * 60 * 1000 };
+    if (ranges[timeRange] && now - eventTime > ranges[timeRange]) return false;
+    
+    return true;
+  });
+
+  const handleRefresh = () => {
+    fetchEvents();
+    onAddLog?.('Live security feed refreshed from backend', 'medium');
+  };
+
+  const severityCounts = events.reduce((acc, event) => {
+    acc[event.severity] = (acc[event.severity] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
   useEffect(() => {
     if (!autoScroll || isPaused || !scrollRef.current) return;
@@ -143,7 +164,9 @@ export default function LiveSecurityEventsTab({ onAddLog }: LiveSecurityEventsTa
             </div>
             <div>
               <h2 className="text-lg font-black text-zinc-100 uppercase tracking-tight">Live Security Events</h2>
-              <p className="text-xs text-zinc-400 font-semibold">Real-time threat detection and event monitoring</p>
+              <p className="text-xs text-zinc-400 font-semibold">
+                {isLive ? 'Streaming real audit events from backend' : 'Waiting for backend connection...'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">

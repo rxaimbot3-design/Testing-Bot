@@ -158,6 +158,12 @@ export default function App() {
     status: 'online' as 'online' | 'offline' | 'lockdown'
   });
 
+  const [enterpriseStatus, setEnterpriseStatus] = useState<{
+    totalShards: number;
+    ping: number;
+    uptimeMinutes: number;
+  } | null>(null);
+
   const [adminAuthenticated, setAdminAuthenticated] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminKeyInput, setAdminKeyInput] = useState('');
@@ -259,9 +265,35 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    const fetchEnterprise = async () => {
+      try {
+        const res = await apiFetch('/api/enterprise/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (mounted && data) {
+          setEnterpriseStatus({
+            totalShards: data.totalShards || 1,
+            ping: data.shards?.[0]?.ping || 0,
+            uptimeMinutes: data.shards?.[0]?.uptimeMinutes || 0
+          });
+        }
+      } catch {
+        // Silent fail
+      }
+    };
+    fetchEnterprise();
+    const interval = setInterval(fetchEnterprise, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
-    { id: '1', time: new Date().toLocaleTimeString(), user: 'ClusterWorker-01', action: 'Auto Sharding Cluster Engine started. 4 shards active.', severity: 'low' },
+    { id: '1', time: new Date().toLocaleTimeString(), user: 'System', action: 'Security engine initialized.', severity: 'low' },
     { id: '2', time: new Date().toLocaleTimeString(), user: 'Gemini-AI', action: 'Google Search Live Grounding & Anti-Scam Shield online.', severity: 'low' },
     { id: '3', time: new Date().toLocaleTimeString(), user: 'SecurityCenter', action: 'Immutable audit trail cryptographically verified.', severity: 'low' }
   ]);
@@ -483,12 +515,12 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-zinc-900/50 rounded-xl border border-zinc-800/50 text-xs font-bold text-zinc-400">
             <Activity className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Cluster Ping: 18ms</span>
+            <span>Cluster Ping: {enterpriseStatus?.ping ?? 0}ms</span>
           </div>
 
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            High Availability (4/4 Shards)
+            {enterpriseStatus?.totalShards ? `High Availability (${enterpriseStatus.totalShards} Shard${enterpriseStatus.totalShards !== 1 ? 's' : ''})` : 'High Availability'}
           </span>
 
           {adminAuthenticated ? (
