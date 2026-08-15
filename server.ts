@@ -134,12 +134,19 @@ try {
 
 export function logAdminAuditAction(action: string, req: express.Request, details: any = {}) {
   const actorIp = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
-  auditLogQueue.enqueue({
+  const record = {
+    timestamp: new Date().toISOString(),
     action,
     actorIp,
     details,
     source: "admin_api"
-  });
+  };
+  auditLogQueue.enqueue(record);
+  adminAuditLogs.push(record);
+  // Prevent unbounded growth in memory
+  if (adminAuditLogs.length > 10000) {
+    adminAuditLogs = adminAuditLogs.slice(-5000);
+  }
   addBotLog(`🛡️ [AUDIT LOG] Action: ${action} by IP: ${actorIp}`, "info");
 }
 
@@ -347,8 +354,21 @@ const parsedPort = parseInt(String(process.env.PORT || 3000).trim(), 10);
 const PORT = (!isNaN(parsedPort) && parsedPort > 0) ? parsedPort : 3000;
 let httpServer: ReturnType<typeof app.listen> | null = null;
 
-// Enable trusted proxy model for accurate client IP resolution behind reverse proxy
-app.set("trust proxy", 1);
+// Enable trusted proxy model ONLY when explicitly configured via TRUST_PROXY env.
+// Accepted values:
+// - "true" / "1" / "yes" : trust first proxy hop (legacy behavior)
+// - comma-separated IPs   : trust only specified proxy IPs
+// - anything else / unset : do NOT trust proxy headers
+const trustProxyEnv = String(process.env.TRUST_PROXY || "").trim();
+if (trustProxyEnv && /^(true|1|yes)$/i.test(trustProxyEnv)) {
+  app.set("trust proxy", 1);
+} else if (trustProxyEnv) {
+  const trustedIps = trustProxyEnv.split(",").map(s => s.trim()).filter(Boolean);
+  if (trustedIps.length > 0) {
+    app.set("trust proxy", trustedIps);
+  }
+}
+// If TRUST_PROXY is unset/falsy, Express will not trust proxy headers by default.
 
 // Security Middleware (Helmet, CORS, Rate Limiting)
 app.use(helmet({
@@ -379,10 +399,14 @@ app.use("/api/", limiter);
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  trackError(`Unhandled Rejection: ${reason}`, "server");
 });
 
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception thrown:", err);
+  trackError(`Uncaught Exception: ${err.message}`, "server", err.stack);
+  // Security-critical service: prefer controlled shutdown over running in potentially corrupted state
+  gracefulShutdown("UNCAUGHT_EXCEPTION").finally(() => process.exit(1));
 });
 
 let isShuttingDown = false;
@@ -426,6 +450,13 @@ async function gracefulShutdown(signal: string) {
     }
   } catch (e) {
     console.error("Error closing Redis during shutdown:", e);
+  }
+
+  try {
+    auditLogQueue.shutdown();
+    console.log("Audit log queue flushed.");
+  } catch (e) {
+    console.error("Error flushing audit log queue during shutdown:", e);
   }
 
   try {
@@ -861,7 +892,7 @@ app.post("/api/auth/discord/login", RateLimiterMiddleware.limit(60000, 10, "logi
 
     addBotLog(`✅ Authorized Discord login by ${userData.username}`, "success");
 
-    res.json({ success: true, token: sessionToken, user: userData });
+    res.json({ success: true, user: userData });
   } catch (err: any) {
     console.error("Discord login error:", err);
     res.status(500).json({ success: false, error: "Internal server error" });
@@ -899,7 +930,6 @@ app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), (re
       addBotLog(`🔑 [AUTH] Successful admin login session established (${mode}).`, "info");
       return res.json({
         success: true,
-        token: sessionToken,
         username: "Admin",
         mode,
         clientIp,
@@ -1018,21 +1048,64 @@ app.post("/api/admin/backup-integrity-test", requireAdminAuth, async (req, res) 
 
 app.post("/api/admin/secrets-scan", requireAdminAuth, async (req, res) => {
   try {
-    const allowedBase = process.cwd();
-    let targetPath = process.cwd();
+    const allowedBase = path.resolve(process.cwd());
+    let targetPath = allowedBase;
     if (req.body && typeof req.body.targetPath === "string" && req.body.targetPath.trim()) {
       const resolved = path.resolve(allowedBase, req.body.targetPath);
-      if (!resolved.startsWith(allowedBase)) {
+      // Use path.relative() for safe containment check; rejects symlinks and traversal
+      const relative = path.relative(allowedBase, resolved);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
         return res.status(403).json({ success: false, error: "Access denied: path traversal blocked." });
       }
       targetPath = resolved;
     }
+
     let scannedContent = "";
     try {
-      scannedContent = fs.readFileSync(targetPath, "utf8");
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        // Recursively collect readable text files up to a safe limit
+        const MAX_FILES = 200;
+        const MAX_BYTES = 5 * 1024 * 1024; // 5 MB total cap
+        const files: string[] = [];
+        const walk = (dir: string) => {
+          if (files.length >= MAX_FILES) return;
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (files.length >= MAX_FILES) break;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              walk(full);
+            } else if (entry.isFile()) {
+              files.push(full);
+            }
+          }
+        };
+        walk(targetPath);
+
+        const parts: string[] = [];
+        let totalBytes = 0;
+        for (const file of files) {
+          try {
+            const data = fs.readFileSync(file, "utf8");
+            totalBytes += Buffer.byteLength(data, "utf8");
+            if (totalBytes > MAX_BYTES) {
+              parts.push(`... [scan truncated at ${MAX_BYTES / 1024 / 1024} MB]`);
+              break;
+            }
+            parts.push(`--- ${file} ---\n${data}`);
+          } catch {
+            // skip unreadable files
+          }
+        }
+        scannedContent = parts.join("\n\n") || "(empty directory)";
+      } else {
+        scannedContent = fs.readFileSync(targetPath, "utf8");
+      }
     } catch {
       return res.status(400).json({ success: false, error: "Unable to read target path." });
     }
+
     const findings = scanForSecrets(scannedContent);
     logAdminAuditAction("SECRETS_SCAN", req, { findingsCount: findings.length });
     return res.json({ success: true, findingsCount: findings.length, findings: findings.map(f => f.slice(0, 8) + "***") });

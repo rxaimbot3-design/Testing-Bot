@@ -72,7 +72,8 @@ describe("Dashboard API: Admin Auth Flow", () => {
     const res = await request(app).post("/api/auth/login").send({ adminKey: process.env.ADMIN_SECRET });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.token).toBeDefined();
+    expect(res.body.token).toBeUndefined();
+    expect(res.headers["set-cookie"]).toBeDefined();
   });
 
   it("rejects invalid admin secret", async () => {
@@ -96,7 +97,9 @@ describe("Dashboard API: Session Management", () => {
 
   it("logs out and clears session", async () => {
     const loginRes = await request(app).post("/api/auth/login").send({ adminKey: process.env.ADMIN_SECRET });
-    const token = loginRes.body.token;
+    const cookieHeader = loginRes.headers["set-cookie"];
+    const sessionCookie = (cookieHeader as string[] || []).find((c: string) => c.startsWith("admin_session_token="));
+    const token = sessionCookie ? sessionCookie.split(";")[0].split("=")[1] : "";
     const res = await request(app).post("/api/auth/logout").set("Cookie", `admin_session_token=${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

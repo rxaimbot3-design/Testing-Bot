@@ -208,7 +208,9 @@ describe("E2E: Admin Authentication Lifecycle", () => {
     expect(loginRes.status).toBe(200);
     expect(loginRes.body.success).toBe(true);
 
-    const token = loginRes.body.token;
+    const cookieHeader = loginRes.headers["set-cookie"];
+    const sessionCookie = (cookieHeader as string[] || []).find((c: string) => c.startsWith("admin_session_token="));
+    const token = sessionCookie ? sessionCookie.split(";")[0].split("=")[1] : "";
     const sessionRes = await request(app).get("/api/auth/session").set("Cookie", `admin_session_token=${token}`);
     expect(sessionRes.status).toBe(200);
     expect(sessionRes.body.authenticated).toBe(true);
