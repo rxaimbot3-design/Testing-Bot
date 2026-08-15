@@ -202,7 +202,7 @@ function checkSessionReplay(token: string): boolean {
   return false;
 }
 
-// Active Admin Sessions Store (Multi-Instance: Redis-backed with in-memory fallback)
+// Active Admin Sessions Store (Multi-Instance: Redis is authoritative, local Map is cache)
 const activeAdminSessions = new Map<string, { username: string; createdAt: number; expiresAt: number; tokenHash: string }>();
 const SESSIONS_FILE = path.join(process.cwd(), "admin_sessions.json");
 const REDIS_SESSION_PREFIX = "session:admin:";
@@ -229,7 +229,7 @@ async function redisSetSession(tokenHash: string, session: { username: string; c
     if (!client || !MongoRedisEngine.isRedisConnected) return;
     await client.setEx(getRedisSessionKey(tokenHash), ttlSec, JSON.stringify(session));
   } catch {
-    // silently fallback to in-memory
+    // silently fallback to in-memory cache
   }
 }
 
@@ -239,7 +239,7 @@ async function redisDelSession(tokenHash: string): Promise<void> {
     if (!client || !MongoRedisEngine.isRedisConnected) return;
     await client.del(getRedisSessionKey(tokenHash));
   } catch {
-    // silently fallback to in-memory
+    // silently fallback to in-memory cache
   }
 }
 
@@ -249,23 +249,6 @@ async function syncSessionsToRedis(): Promise<void> {
   for (const [tokenHash, session] of activeAdminSessions.entries()) {
     await redisSetSession(tokenHash, session, ttlSec);
   }
-}
-
-async function getGitHubToken(): Promise<string> {
-  if (process.env.GITHUB_TOKEN) {
-    return process.env.GITHUB_TOKEN;
-  }
-  try {
-    return TokenVault.retrieve("GITHUB_TOKEN") || "";
-  } catch {
-    return "";
-  }
-}
-
-async function setGitHubToken(token: string): Promise<void> {
-  if (!token) return;
-  TokenVault.store(token, "GITHUB_TOKEN");
-  process.env.GITHUB_TOKEN = token;
 }
 
 async function loadAdminSessions() {
@@ -303,8 +286,9 @@ async function createAdminSession(username: string): Promise<{ token: string; ex
   const tokenHash = hashToken(token);
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
   const session = { username, createdAt: Date.now(), expiresAt, tokenHash };
-  activeAdminSessions.set(tokenHash, session);
+  // Redis is authoritative: write to Redis first, then update local cache
   await redisSetSession(tokenHash, session, 24 * 60 * 60);
+  activeAdminSessions.set(tokenHash, session);
   saveAdminSessions();
   return { token, expiresAt };
 }
@@ -373,15 +357,20 @@ async function requireAdminAuth(req: express.Request, res: express.Response, nex
     // Replay protection for session tokens removed to allow parallel dashboard requests.
     // Session security is maintained via hashed server-side storage and 24h expiry.
 
-    // Active Session Token match (hashed lookup) - Redis-first for multi-instance
+    // Redis-first session lookup (Redis is authoritative, local Map is cache)
     const tokenHash = hashToken(tokenStr);
     let session = activeAdminSessions.get(tokenHash);
 
-    if (!session && MongoRedisEngine.isRedisConnected) {
+    if (MongoRedisEngine.isRedisConnected) {
       const redisSession = await redisGetSession(tokenHash);
       if (redisSession) {
+        // Update local cache with authoritative Redis state
         activeAdminSessions.set(tokenHash, redisSession);
         session = redisSession;
+      } else if (session) {
+        // Redis doesn't have it, but local cache does - remove stale local entry
+        activeAdminSessions.delete(tokenHash);
+        session = undefined;
       }
     }
 

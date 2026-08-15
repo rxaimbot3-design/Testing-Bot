@@ -856,8 +856,27 @@ export interface ServerSnapshotData {
   timestamp: string;
   channelCount: number;
   roleCount: number;
-  channels: Array<{ id: string; name: string; type: number; parentName?: string }>;
-  roles: Array<{ id: string; name: string; color: number; permissions: string }>;
+  channels: Array<{
+    id: string;
+    name: string;
+    type: number;
+    parentId?: string;
+    parentName?: string;
+    position?: number;
+    topic?: string;
+    nsfw?: boolean;
+    rateLimitPerUser?: number;
+    permissionOverwrites?: Array<{ id: string; allow: string; deny: string; type: number }>;
+  }>;
+  roles: Array<{
+    id: string;
+    name: string;
+    color: number;
+    permissions: string;
+    hoist?: boolean;
+    mentionable?: boolean;
+    position?: number;
+  }>;
 }
 
 export class ServerSnapshotRestore {
@@ -875,14 +894,28 @@ export class ServerSnapshotRestore {
       id: c.id,
       name: c.name,
       type: c.type,
-      parentName: c.parent ? c.parent.name : undefined
+      parentId: c.parentId,
+      parentName: c.parent ? c.parent.name : undefined,
+      position: c.position,
+      topic: c.topic,
+      nsfw: c.nsfw,
+      rateLimitPerUser: c.rateLimitPerUser,
+      permissionOverwrites: c.permissionOverwrites.cache.map(po => ({
+        id: po.id,
+        allow: po.allow.bitfield.toString(),
+        deny: po.deny.bitfield.toString(),
+        type: po.type
+      }))
     }));
 
     const roles = guild.roles.cache.map((r: any) => ({
       id: r.id,
       name: r.name,
       color: r.color,
-      permissions: r.permissions.bitfield.toString()
+      permissions: r.permissions.bitfield.toString(),
+      hoist: r.hoist,
+      mentionable: r.mentionable,
+      position: r.position
     }));
 
     const snapshot: ServerSnapshotData = {
@@ -943,16 +976,173 @@ export class ServerSnapshotRestore {
 
     alertCallback(`📸 [1-CLICK RESTORE INITIATED] Restoring **${guild.name}** to snapshot from ${new Date(snap.timestamp).toLocaleString()}...`);
     
-    // Auto-heal channels if missing
-    for (const snapChan of snap.channels) {
-      const exists = guild.channels.cache.some(c => c.name.toLowerCase() === snapChan.name.toLowerCase() && c.type === snapChan.type);
-      if (!exists) {
-        await guild.channels.create({ name: snapChan.name, type: snapChan.type as any }).catch(() => {});
-      }
-    }
+    try {
+      // Refresh guild state
+      await guild.channels.fetch().catch(() => {});
+      await guild.roles.fetch().catch(() => {});
 
-    alertCallback(`✅ [1-CLICK RESTORE COMPLETE] Server **${guild.name}** successfully restored to snapshot state (${snap.channels.length} channels verified).`);
-    return true;
+      const protectedChannelIds = new Set([
+        guild.id, // @everyone channel
+        ...guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).map(c => c.id)
+      ]);
+
+      // Phase 1: Restore roles
+      alertCallback(`🔧 Restoring ${snap.roles.length} roles...`);
+      const existingRoleIds = new Set(guild.roles.cache.map(r => r.id));
+      const snapshotRoleIds = new Set(snap.roles.map(r => r.id));
+
+      // Delete roles not in snapshot (except @everyone)
+      for (const role of guild.roles.cache.values()) {
+        if (role.id === guild.id) continue; // Skip @everyone
+        if (!snapshotRoleIds.has(role.id)) {
+          await role.delete("Snapshot restore: removing role not in snapshot").catch(() => {});
+        }
+      }
+
+      // Create/update roles from snapshot
+      for (const snapRole of snap.roles) {
+        if (snapRole.id === guild.id) continue; // Skip @everyone
+        const existing = guild.roles.cache.get(snapRole.id);
+        if (existing) {
+          // Update existing role
+          const updateData: any = {};
+          if (existing.name !== snapRole.name) updateData.name = snapRole.name;
+          if (existing.color !== snapRole.color) updateData.color = snapRole.color;
+          if (existing.permissions.bitfield.toString() !== snapRole.permissions) {
+            updateData.permissions = BigInt(snapRole.permissions);
+          }
+          if (snapRole.hoist !== undefined && existing.hoist !== snapRole.hoist) updateData.hoist = snapRole.hoist;
+          if (snapRole.mentionable !== undefined && existing.mentionable !== snapRole.mentionable) updateData.mentionable = snapRole.mentionable;
+          if (Object.keys(updateData).length > 0) {
+            await existing.edit(updateData, "Snapshot restore: updating role").catch(() => {});
+          }
+        } else {
+          // Create missing role
+          await guild.roles.create({
+            name: snapRole.name,
+            color: snapRole.color,
+            permissions: BigInt(snapRole.permissions),
+            hoist: snapRole.hoist,
+            mentionable: snapRole.mentionable,
+            reason: "Snapshot restore: creating missing role"
+          }).catch(() => {});
+        }
+      }
+
+      // Refresh roles after changes
+      await guild.roles.fetch().catch(() => {});
+
+      // Phase 2: Restore channels
+      alertCallback(`🔧 Restoring ${snap.channels.length} channels...`);
+      const existingChannelIds = new Set(guild.channels.cache.map(c => c.id));
+      const snapshotChannelIds = new Set(snap.channels.map(c => c.id));
+
+      // Delete channels not in snapshot (except protected)
+      for (const channel of guild.channels.cache.values()) {
+        if (protectedChannelIds.has(channel.id)) continue;
+        if (!snapshotChannelIds.has(channel.id)) {
+          await channel.delete("Snapshot restore: removing channel not in snapshot").catch(() => {});
+        }
+      }
+
+      // Create missing channels
+      await guild.channels.fetch().catch(() => {});
+      for (const snapChan of snap.channels) {
+        if (snapChan.id === guild.id) continue; // Skip @everyone pseudo-channel
+        const existing = guild.channels.cache.get(snapChan.id);
+        if (!existing) {
+          const parent = snapChan.parentId ? guild.channels.cache.get(snapChan.parentId) : undefined;
+          await guild.channels.create({
+            name: snapChan.name,
+            type: snapChan.type as any,
+            parent: parent,
+            position: snapChan.position,
+            topic: snapChan.topic,
+            nsfw: snapChan.nsfw,
+            rateLimitPerUser: snapChan.rateLimitPerUser,
+            permissionOverwrites: snapChan.permissionOverwrites?.map(po => ({
+              id: po.id,
+              allow: BigInt(po.allow),
+              deny: BigInt(po.deny),
+              type: po.type
+            })) || [],
+            reason: "Snapshot restore: creating missing channel"
+          }).catch(() => {});
+        }
+      }
+
+      // Refresh channels after creation
+      await guild.channels.fetch().catch(() => {});
+
+      // Phase 3: Update channel properties and positions
+      for (const snapChan of snap.channels) {
+        if (snapChan.id === guild.id) continue;
+        const existing = guild.channels.cache.get(snapChan.id);
+        if (!existing) continue;
+
+        const updateData: any = {};
+        if (existing.name !== snapChan.name) updateData.name = snapChan.name;
+        if (existing.topic !== snapChan.topic) updateData.topic = snapChan.topic;
+        if (existing.nsfw !== snapChan.nsfw) updateData.nsfw = snapChan.nsfw;
+        if (existing.rateLimitPerUser !== snapChan.rateLimitPerUser) updateData.rateLimitPerUser = snapChan.rateLimitPerUser;
+        if (existing.position !== snapChan.position) updateData.position = snapChan.position;
+
+        const currentParentId = existing.parentId;
+        if (snapChan.parentId && currentParentId !== snapChan.parentId) {
+          const parent = guild.channels.cache.get(snapChan.parentId);
+          if (parent) updateData.parent = parent;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await existing.edit(updateData, "Snapshot restore: updating channel").catch(() => {});
+        }
+
+        // Restore permission overwrites
+        if (snapChan.permissionOverwrites && snapChan.permissionOverwrites.length > 0) {
+          const currentOverwrites = new Map(existing.permissionOverwrites.cache.map(po => [po.id, po]));
+          const targetOverwrites = new Map(snapChan.permissionOverwrites.map(po => [po.id, po]));
+
+          // Remove overwrites not in snapshot
+          for (const [id, po] of currentOverwrites) {
+            if (!targetOverwrites.has(id)) {
+              await existing.permissionOverwrites.delete(id, "Snapshot restore: removing overwrite").catch(() => {});
+            }
+          }
+
+          // Create/update overwrites from snapshot
+          for (const [id, po] of targetOverwrites) {
+            const allow = BigInt(po.allow);
+            const deny = BigInt(po.deny);
+            const current = currentOverwrites.get(id);
+            if (current) {
+              if (current.allow.bitfield.toString() !== po.allow || current.deny.bitfield.toString() !== po.deny) {
+                await existing.permissionOverwrites.edit(id, { allow, deny }, "Snapshot restore: updating overwrite").catch(() => {});
+              }
+            } else {
+              await existing.permissionOverwrites.create({ id, allow, deny, type: po.type }, "Snapshot restore: creating overwrite").catch(() => {});
+            }
+          }
+        }
+      }
+
+      // Phase 4: Fix channel positions
+      const channelsToPosition = guild.channels.cache.filter(c => !protectedChannelIds.has(c.id));
+      if (channelsToPosition.size > 0) {
+        await guild.channels.setPositions(
+          channelsToPosition.map(c => {
+            const snapChan = snap.channels.find(sc => sc.id === c.id);
+            return { id: c.id, position: snapChan?.position ?? c.position };
+          }),
+          "Snapshot restore: fixing channel positions"
+        ).catch(() => {});
+      }
+
+      alertCallback(`✅ [1-CLICK RESTORE COMPLETE] Server **${guild.name}** successfully restored to snapshot state (${snap.channels.length} channels, ${snap.roles.length} roles verified).`);
+      return true;
+    } catch (err: any) {
+      alertCallback(`❌ [SNAPSHOT RESTORE] Failed: ${err.message}`);
+      return false;
+    }
   }
 }
 
