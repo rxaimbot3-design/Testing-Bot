@@ -110,50 +110,6 @@ export default function LiveSecurityEventsTab({ onAddLog }: LiveSecurityEventsTa
     return acc;
   }, {} as Record<string, number>);
 
-  useEffect(() => {
-    if (!autoScroll || isPaused || !scrollRef.current) return;
-    scrollRef.current.scrollTop = 0;
-  }, [events, autoScroll, isPaused]);
-
-  const filteredEvents = events.filter(event => {
-    if (filterType !== 'all' && event.type !== filterType) return false;
-    if (filterSeverity !== 'all' && event.severity !== filterSeverity) return false;
-    if (searchQuery && !event.description.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !event.source.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !event.type.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    
-    const eventTime = new Date(event.timestamp).getTime();
-    const now = Date.now();
-    const ranges: Record<string, number> = { '15m': 15 * 60 * 1000, '1h': 60 * 60 * 1000, '6h': 6 * 60 * 60 * 1000, '24h': 24 * 60 * 60 * 1000 };
-    if (ranges[timeRange] && now - eventTime > ranges[timeRange]) return false;
-    
-    return true;
-  });
-
-  const handleRefresh = () => {
-    const newEvents: SecurityEvent[] = Array.from({ length: 5 }, (_, i) => {
-      const type = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-      const severities: SecurityEvent['severity'][] = ['low', 'medium', 'high', 'critical'];
-      const severity = severities[Math.floor(Math.random() * severities.length)];
-      return {
-        id: `evt-${Date.now()}-${i}`,
-        type,
-        severity,
-        timestamp: new Date().toISOString(),
-        source: ['Discord Gateway', 'API Endpoint', 'WebSocket', 'Message Scanner'][Math.floor(Math.random() * 4)],
-        description: 'New security event detected',
-        details: { ip: `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`, actionTaken: 'blocked', confidence: Math.floor(Math.random() * 30 + 70) }
-      };
-    });
-    setEvents(prev => [...newEvents, ...prev]);
-    onAddLog?.('Live security feed updated with new events', 'medium');
-  };
-
-  const severityCounts = events.reduce((acc, event) => {
-    acc[event.severity] = (acc[event.severity] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
   return (
     <div className="space-y-6" id="live-security-events-tab">
       <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
