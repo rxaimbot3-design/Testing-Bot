@@ -560,6 +560,10 @@ export class CppNativeEngine {
   private static initialized = false;
   private static engineMode: "native" | "worker" | "sync" = "sync";
 
+  static getEngineMode(): "native" | "worker" | "sync" {
+    return this.engineMode;
+  }
+
   static reset(): void {
     this.initialized = false;
     this.engineMode = "sync";

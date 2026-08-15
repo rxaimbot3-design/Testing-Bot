@@ -360,10 +360,51 @@ export class AntiPhishing {
 }
 
 // 9. Rate Limit Tracker
+// Uses Redis atomic counter when available for multi-instance consistency;
+// falls back to in-memory TtlMap otherwise.
 export class RateLimiter {
   private static userActions = new TtlMap<string, { count: number; timestamp: number }>({ ttlMs: 10000, maxEntries: 10000, autoCleanupMs: 30000 });
+  private static redisAvailable = false;
+  private static redisChecked = false;
 
-  static check(userId: string): boolean {
+  private static async ensureRedis(): Promise<boolean> {
+    if (this.redisChecked) return this.redisAvailable;
+    try {
+      await MongoRedisEngine.initRedis();
+      this.redisAvailable = MongoRedisEngine.isRedisConnected;
+    } catch {
+      this.redisAvailable = false;
+    }
+    this.redisChecked = true;
+    return this.redisAvailable;
+  }
+
+  static async check(userId: string): Promise<boolean> {
+    const redisReady = await this.ensureRedis();
+    if (redisReady) {
+      try {
+        const client = MongoRedisEngine['redisClient'];
+        if (client) {
+          const key = `ratelimit:user:${userId}`;
+          const ttlSec = 10;
+          const limit = 5;
+          
+          const count = await client.incr(key);
+          if (count === 1) {
+            await client.expire(key, ttlSec);
+          }
+          
+          if (count > limit) {
+            return true; // blocked
+          }
+          return false; // allowed
+        }
+      } catch {
+        this.redisAvailable = false;
+      }
+    }
+
+    // In-memory fallback
     const now = Date.now();
     const data = this.userActions.get(userId) || { count: 0, timestamp: now };
 
@@ -1037,17 +1078,18 @@ export class ServerSnapshotRestore {
       const existingChannelIds = new Set(guild.channels.cache.map(c => c.id));
       const snapshotChannelIds = new Set(snap.channels.map(c => c.id));
 
-      // Delete channels not in snapshot (except protected)
-      for (const channel of guild.channels.cache.values()) {
-        if (protectedChannelIds.has(channel.id)) continue;
-        if (!snapshotChannelIds.has(channel.id)) {
-          await channel.delete("Snapshot restore: removing channel not in snapshot").catch(() => {});
-        }
-      }
+      // Only @everyone is truly protected; categories are reconciled like other channels
+      const protectedChannelIds = new Set([
+        guild.id // @everyone pseudo-channel
+      ]);
 
-      // Create missing channels
+      // Separate categories from other channels for ordered reconciliation
+      const snapshotCategories = snap.channels.filter(c => c.type === ChannelType.GuildCategory);
+      const snapshotOtherChannels = snap.channels.filter(c => c.type !== ChannelType.GuildCategory);
+
+      // Create missing channels first (categories before others to establish parents)
       await guild.channels.fetch().catch(() => {});
-      for (const snapChan of snap.channels) {
+      for (const snapChan of [...snapshotCategories, ...snapshotOtherChannels]) {
         if (snapChan.id === guild.id) continue; // Skip @everyone pseudo-channel
         const existing = guild.channels.cache.get(snapChan.id);
         if (!existing) {
@@ -1073,6 +1115,14 @@ export class ServerSnapshotRestore {
 
       // Refresh channels after creation
       await guild.channels.fetch().catch(() => {});
+
+      // Delete extra channels not in snapshot (except protected @everyone)
+      for (const channel of guild.channels.cache.values()) {
+        if (protectedChannelIds.has(channel.id)) continue;
+        if (!snapshotChannelIds.has(channel.id)) {
+          await channel.delete("Snapshot restore: removing channel not in snapshot").catch(() => {});
+        }
+      }
 
       // Phase 3: Update channel properties and positions
       for (const snapChan of snap.channels) {

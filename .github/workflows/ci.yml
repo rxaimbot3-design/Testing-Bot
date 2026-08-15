@@ -73,4 +73,5 @@ jobs:
       - run: npm run build
       - run: node server-build/server.mjs &
       - run: sleep 5 && curl -f http://localhost:3000/api/health
+      - run: curl -s http://localhost:3000/api/health | grep -q '"nativeLoaded":true' || (echo 'Native engine not loaded' && exit 1)
       - run: kill %1 || true

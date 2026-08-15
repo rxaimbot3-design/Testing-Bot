@@ -870,9 +870,14 @@ app.get("/api/health", (req, res) => {
 
   try {
     const cppMetrics = CppNativeEngine.getMetrics();
-    checks.cppEngine = { status: cppMetrics?.status !== "OFFLINE" ? "up" : "down", mode: "native" };
+    const engineMode = CppNativeEngine.getEngineMode();
+    checks.cppEngine = { 
+      status: cppMetrics?.status !== 'OFFLINE' ? 'up' : 'down', 
+      mode: engineMode,
+      nativeLoaded: engineMode === 'native'
+    };
   } catch {
-    checks.cppEngine = { status: "down", mode: "native" };
+    checks.cppEngine = { status: 'down', mode: 'unknown', nativeLoaded: false };
   }
 
   try {
