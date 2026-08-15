@@ -931,7 +931,7 @@ export class ServerSnapshotRestore {
       await guild.roles.fetch().catch(() => {});
     }
 
-    const channels = guild.channels.cache.map(c => ({
+    const channels = guild.channels.cache.map((c: any) => ({
       id: c.id,
       name: c.name,
       type: c.type,
@@ -941,7 +941,7 @@ export class ServerSnapshotRestore {
       topic: c.topic,
       nsfw: c.nsfw,
       rateLimitPerUser: c.rateLimitPerUser,
-      permissionOverwrites: c.permissionOverwrites.cache.map(po => ({
+      permissionOverwrites: c.permissionOverwrites.cache.map((po: any) => ({
         id: po.id,
         allow: po.allow.bitfield.toString(),
         deny: po.deny.bitfield.toString(),
@@ -1021,11 +1021,6 @@ export class ServerSnapshotRestore {
       // Refresh guild state
       await guild.channels.fetch().catch(() => {});
       await guild.roles.fetch().catch(() => {});
-
-      const protectedChannelIds = new Set([
-        guild.id, // @everyone channel
-        ...guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).map(c => c.id)
-      ]);
 
       // Phase 1: Restore roles
       alertCallback(`🔧 Restoring ${snap.roles.length} roles...`);

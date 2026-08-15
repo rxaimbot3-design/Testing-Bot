@@ -321,6 +321,23 @@ async function revokeAllAdminSessions() {
   saveAdminSessions();
 }
 
+async function getGitHubToken(): Promise<string> {
+  if (process.env.GITHUB_TOKEN) {
+    return process.env.GITHUB_TOKEN;
+  }
+  try {
+    return TokenVault.retrieve("GITHUB_TOKEN") || "";
+  } catch {
+    return "";
+  }
+}
+
+async function setGitHubToken(token: string): Promise<void> {
+  if (!token) return;
+  TokenVault.store(token, "GITHUB_TOKEN");
+  process.env.GITHUB_TOKEN = token;
+}
+
 loadAdminSessions();
 
 // Cleanup expired sessions every 10 minutes
@@ -2348,8 +2365,7 @@ try {
   if (fs.existsSync("./github_config.json")) {
     const ghcfg = readEncryptedConfig("./github_config.json");
     if (ghcfg?.token) {
-      TokenVault.store(ghcfg.token, "GITHUB_TOKEN");
-      process.env.GITHUB_TOKEN = ghcfg.token;
+      await setGitHubToken(ghcfg.token);
     }
     if (ghcfg?.repo) {
       linkedRepo = ghcfg.repo;
