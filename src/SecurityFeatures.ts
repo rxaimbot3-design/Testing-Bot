@@ -1143,7 +1143,9 @@ export class ServerSnapshotRestore {
         }
 
         // Restore permission overwrites
-        if (snapChan.permissionOverwrites && snapChan.permissionOverwrites.length > 0) {
+        // Always reconcile when permissionOverwrites is defined, even if empty.
+        // An empty array means "no overwrites" and should remove all existing overwrites.
+        if (snapChan.permissionOverwrites) {
           const currentOverwrites = new Map(existing.permissionOverwrites.cache.map(po => [po.id, po]));
           const targetOverwrites = new Map(snapChan.permissionOverwrites.map(po => [po.id, po]));
 
@@ -1225,7 +1227,8 @@ export class AutoBackupEngine {
             permissions: c.permissionOverwrites.cache.map(o => ({
               id: o.id,
               allow: o.allow.bitfield.toString(),
-              deny: o.deny.bitfield.toString()
+              deny: o.deny.bitfield.toString(),
+              type: o.type
             }))
           };
         }).filter(Boolean)
