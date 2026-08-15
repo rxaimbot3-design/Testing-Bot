@@ -274,9 +274,9 @@ export default function App() {
         const data = await res.json();
         if (mounted && data) {
           setEnterpriseStatus({
-            totalShards: data.totalShards || 1,
-            ping: data.shards?.[0]?.ping || 0,
-            uptimeMinutes: data.shards?.[0]?.uptimeMinutes || 0
+            totalShards: data.gatewayCount || 1,
+            ping: data.gateways?.[0]?.ping || 0,
+            uptimeMinutes: data.gateways?.[0]?.uptimeMinutes || 0
           });
         }
       } catch {
@@ -515,12 +515,12 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-zinc-900/50 rounded-xl border border-zinc-800/50 text-xs font-bold text-zinc-400">
             <Activity className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Cluster Ping: {enterpriseStatus?.ping ?? 0}ms</span>
+            <span>Gateway Ping: {enterpriseStatus?.ping ?? 0}ms</span>
           </div>
 
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            {enterpriseStatus?.totalShards ? `High Availability (${enterpriseStatus.totalShards} Shard${enterpriseStatus.totalShards !== 1 ? 's' : ''})` : 'High Availability'}
+             {enterpriseStatus?.totalShards ? `Single Instance (${enterpriseStatus.totalShards} Gateway${enterpriseStatus.totalShards !== 1 ? 's' : ''})` : 'Single Instance'}
           </span>
 
           {adminAuthenticated ? (
@@ -773,7 +773,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-zinc-800/50 bg-[#09090b] py-4 text-center text-xs text-zinc-500 font-medium mt-auto" id="dashboard-footer">
-        © {new Date().getFullYear()} Enterprise Discord Bot Core Engine. High Availability & Multi-Tenant Architecture.
+        © {new Date().getFullYear()} Enterprise Discord Bot Core Engine. Single-Instance Deployment with Process Resilience.
       </footer>
     </div>
   );

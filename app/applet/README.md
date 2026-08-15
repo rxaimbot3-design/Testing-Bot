@@ -60,7 +60,7 @@ The codebase includes an interactive Stress Testing Drill designed to validate m
 
 1. In your Discord server, type `/test-nuke-defense`.
 2. The bot will dispatch simulated malicious event signatures.
-3. Verify that the Dashboard increments "Blocked Attacks" correctly without dropping WebSocket/API connections.
+3. Verify that the Dashboard increments "Blocked Attacks" correctly without dropping HTTP/API connections.
 
 ## 📜 Security Disclaimer
 While this software employs cutting-edge **Zero Trust Architecture** and rapid-response engines, no system is entirely invincible. It is strongly recommended to conduct your own penetration testing, keep a minimal footprint of Users with `Administrator` privileges, and rely on 2FA for all server staff. 

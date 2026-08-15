@@ -357,7 +357,7 @@ sequenceDiagram
 - Stateless API servers behind load balancer
 - Redis for shared session and rate limit state
 - MongoDB for persistent data
-- WebSocket connections require sticky sessions
+- HTTP polling connections require no sticky sessions
 - C++ engine metrics aggregated per instance
 
 ### Performance Optimization

@@ -1454,7 +1454,7 @@ export class EnhancedEventEngine {
 
     let entry = await fetchAuditLogWithRetry(guild, actionType, targetId, 15, 300).catch(() => null);
 
-    // Re-check self memory in case it was updated during the audit log fetch (fixes race condition where websocket beats REST API)
+    // Re-check self memory in case it was updated during the audit log fetch (fixes race condition where polling beats REST API)
     if (selfMemoryCheck()) return;
 
     let executorId = entry?.executorId || entry?.executor?.id;
@@ -2429,7 +2429,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             description: `**Triggered By:** <@${message.author.id}> (${message.author.tag})\n` +
                          `**Security Score:** 🟢 100/100 MAXIMUM SHIELD\n` +
                          `**Audit Channel:** <#${message.guild.channels.cache.find(c => c.name === "security-logs")?.id || ""}>\n` +
-                         `**6 Defense Layers:** All 100% Armed & Operational`,
+                         `**6 Defense Layers:** All Armed & Operational`,
             color: 0x10B981
           });
 
@@ -2488,7 +2488,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             `• **Panic Lockdown Mode:** \`${stats.panicLockdownActive ? "ACTIVE 🚨" : "STANDBY 🟢"}\` \n` +
             `• **Verified Role Permissions:** \`Locked VCs: ${auditRes.lockedVCs} | Unlocked: ${auditRes.unlockedChannels} | Hidden: ${auditRes.hiddenChannels}\` \n` +
             `• **Total Blocked Attacks:** \`${stats.blockedAttacksCount}\` Threats Mitigated\n\n` +
-            `✅ **System Status:** All 6 Defense Layers Active & 100% Operational!`
+              `✅ **System Status:** Defense modules operational`
           ).catch(() => {});
           return;
         }
@@ -2502,7 +2502,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             .setDescription(
               "Welcome to the **ASHTRON Enterprise Zero Trust Web Portal**.\n\n" +
               "• 🛡️ **Zero Trust Security:** Configure 6 Defense Layers, Anti-Nuke & Admin Freeze\n" +
-              "• 📊 **Live Logs & Audits:** Monitor real-time websocket gateway events & threat streams\n" +
+               "• 📊 **Live Logs & Audits:** Monitor real-time HTTP polling events & threat streams\n" +
               "• 🤖 **AI Neural Core:** Custom prompts, Gemini 2.5 Flash setup & bot status\n" +
               `👉 **Click the button below or URL to open the Web Dashboard:**\n\`${link}\``
             )
@@ -2557,7 +2557,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                 `1. Copy this link and place it in channel topics, \`#admin-secret-leaks\`, or suspicious DM conversations as bait.\n` +
                 `2. Anyone can copy the link text without triggering anything.\n` +
                 `3. As soon as a rogue admin, nuker, or intruder **clicks or opens** the link in a browser:\n` +
-                `   - 🛑 Their **IP Address is permanently blacklisted** in Zero Trust IP Shield.\n` +
+                 `   - 🛑 Their **IP Address is blocked** in Zero Trust IP Shield.\n` +
                 `   - 🔨 Their **Discord Account is auto-banned** from the server.\n` +
                 `   - 🚨 A red alert with attacker IP details is sent to \`#security-logs\`!`,
               color: 0xF59E0B
@@ -2642,7 +2642,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
               `🔄 **1-CLICK SERVER RECOVERY SUCCESSFUL!**\n\n` +
               `• **Roles Restored:** \`${rolesRestoredCount}\` Roles\n` +
               `• **Channels Restored:** \`${channelsRestoredCount}\` Channels\n` +
-              `• **Status:** 🟢 100% Secure & Online`
+               `• **Status:** 🟢 Secured & Online`
             ).catch(() => {});
           } catch (err: any) {
             await message.reply(`❌ **Recovery Error:** ${err.message}`).catch(() => {});
@@ -2700,7 +2700,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           } catch (geminiErr: any) {
             const errStr = String(geminiErr?.message || geminiErr).toLowerCase();
             if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-              reply = "Quota limit reached for AI generation, but all ASHTRON security shields remain 100% active!";
+              reply = "Quota limit reached for AI generation, but all ASHTRON security shields remain active!";
             } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
               reply = "AI service is temporarily unavailable. Please try again later.";
             } else {
@@ -2869,7 +2869,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
       const isLink = linkRegex.test(content);
       let isMalicious = false;
       if (isLink) {
-         // Smart Scam Scanner (VirusTotal Mock)
+         // Local Scam Scanner (no external API)
          const maliciousDomains = ["grabify", "free-nitro", "steam-gift", "token-grab", "ip-logger", "discord-nitro.com"];
          isMalicious = maliciousDomains.some(d => content.toLowerCase().includes(d));
          if (isMalicious) {
@@ -3376,7 +3376,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             .setDescription(
               "Welcome to the **ASHTRON Enterprise Zero Trust Web Portal**.\n\n" +
               "• 🛡️ **Zero Trust Security:** Configure 6 Defense Layers, Anti-Nuke & Admin Freeze\n" +
-              "• 📊 **Live Logs & Audits:** Monitor real-time websocket gateway events & threat streams\n" +
+               "• 📊 **Live Logs & Audits:** Monitor real-time HTTP polling events & threat streams\n" +
               "• 🤖 **AI Neural Core:** Custom prompts, Gemini 2.5 Flash setup & bot status\n" +
               `👉 **Click the button below or URL to open the Web Dashboard:**\n\`${link}\``
             )
@@ -3536,7 +3536,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
               `1. Copy this link and place it in channel topic, \`#admin-secret-leaks\`, or suspicious DM chats as bait.\n` +
               `2. Normal members can copy it safely.\n` +
               `3. If a rogue admin, nuker, or bot **clicks/opens** the link in their browser:\n` +
-              `   - 🛑 Their **IP Address is permanently blacklisted**.\n` +
+               `   - 🛑 Their **IP Address is blocked**.\n` +
               `   - 🔨 Their **Discord Account is auto-banned** from the server.\n` +
               `   - 🚨 An alert with attacker IP details is sent to \`#security-logs\`!`,
             color: 0xF59E0B
@@ -4170,7 +4170,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                             `• **Roles Restored:** \`${rolesRestoredCount}\`\n` +
                             `• **Channels Restored:** \`${channelsRestoredCount}\`\n` +
                             `• **Backup Timestamp:** <t:${Math.floor(latest.timestamp/1000)}:F>\n` +
-                            `• **Status:** 🟢 **100% Secure & Online**\n\n` +
+                             `• **Status:** 🟢 **Secured & Online**\n\n` +
                             `*All channels and categories have been mapped back to their structure.*`,
                color: 0x10B981,
                footer: { text: "🛡️ Zero Trust Anti-Nuke Recovery System" }
@@ -4313,7 +4313,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             `• **Panic Lockdown Mode:** \`${stats.panicLockdownActive ? "ACTIVE 🚨" : "STANDBY 🟢"}\` \n` +
             `• **Verified Role Permissions:** \`Locked VCs: ${auditRes.lockedVCs} | Unlocked: ${auditRes.unlockedChannels} | Hidden: ${auditRes.hiddenChannels}\` \n` +
             `• **Total Blocked Attacks:** \`${stats.blockedAttacksCount}\` Threats Mitigated\n\n` +
-            `✅ **System Status:** All 6 Defense Layers Active & 100% Operational!`
+              `✅ **System Status:** Defense modules operational`
           );
         } catch (e: any) {
           await interaction.editReply(`❌ Analysis failed: ${e.message}`);
@@ -4400,7 +4400,7 @@ TASK: Who is guilty + Why + What is the punishment.
 OUTPUT JSON: {"guilty":"@user","reason":"...","punishment":"7d_timeout"}
 
 FINAL RULE:
-Your Goal: Server 100% safe + Members active + Owner's income increased.`;
+Your Goal: Server secured + Members active + Owner's income increased.`;
 
           let reply = "";
           try {

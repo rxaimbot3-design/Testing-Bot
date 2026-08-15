@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This audit covers the Discord security platform codebase. The system has been significantly hardened with 315 automated tests, modularized architecture, and production-ready security controls.
+This audit covers the Discord security platform codebase. The system has been significantly hardened with 313 automated tests, modularized architecture, and production-ready security controls.
 
 **Current Rating: 9.3/10**
 **Selling Readiness: 9.1/10**
@@ -19,7 +19,7 @@ This audit covers the Discord security platform codebase. The system has been si
 | Security Features | ~80% | 30+ tests |
 | E2E/Integration | ~70% | 20+ tests |
 
-**Total: 315 tests across 24 test files**
+**Total: 313 tests across 24 test files**
 
 ## Security Fixes Applied
 
@@ -61,7 +61,7 @@ This audit covers the Discord security platform codebase. The system has been si
 ## Production Readiness
 
 ### What Works
-- 315 automated tests, all passing
+- 313 automated tests, all passing
 - Native C++ engine with worker/sync fallback
 - Security pipeline wired into production path
 - AES-256-GCM secret encryption

@@ -110,7 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- WebSocket support for real-time dashboard updates
+- HTTP polling for real-time dashboard updates
 - Advanced ML-based threat prediction
 - Multi-server cluster management UI
 - Plugin marketplace integration

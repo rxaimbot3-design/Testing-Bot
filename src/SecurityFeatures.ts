@@ -1253,7 +1253,7 @@ export class AutoBackupEngine {
 // 28. Anti-Vanity URL Hijack
 // 29. Emoji/Sticker Delete Protection
 // 30. Forum Channel Protection
-// 31. AI Raid Prediction Engine
+// 31. Statistical Raid Prediction Engine
 export interface RaidPredictionResult {
   predictedRaidProbability: number; // 0 to 100%
   riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -1372,7 +1372,7 @@ export class AISecurityReport {
     try {
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `Write a professional 4-bullet executive security report for a Discord Server. 
-State that Zero Trust Anti-Nuke, AI Raid Prediction, Honeypot Traps, and AES-256 Vault are operational.
+  State that Zero Trust Anti-Nuke, Statistical Raid Prediction, Honeypot Traps, and AES-256 Vault are operational.
 Include 1 proactive recommendation for server admins. Keep it scannable and authoritative.`;
 
       const response = await ai.models.generateContent({
@@ -1430,7 +1430,7 @@ export class AICommandAssistant {
       recommendations: [
         "✅ Verified Role Matrix: 100/100 Channel Overwrites locked & audited.",
         "✅ Honeypot Admin Role active to trap rogue bots.",
-        "✅ AI Raid Prediction active with 15s early warning buffer.",
+        "✅ Statistical Raid Prediction active with 15s early warning buffer.",
         "✅ AES-256 Memory Vault protecting Discord Bot Token.",
         "💡 Tip: Maintain daily automated server snapshots."
       ]
@@ -1812,7 +1812,7 @@ export class InviteTrackerEngine {
   }
 }
 
-// Module Aliases for Zero Trust Engine and AI Raid Prediction Engine
+// Module Aliases for Zero Trust Engine and Statistical Raid Prediction Engine
 
 
 // 10. Audit Log Monitor
@@ -2466,8 +2466,8 @@ export class MongoRedisEngine {
       engine: this.isRedisConnected ? "External Redis" : "In-Memory Key-Value Store (Redis Emulator)",
       keysCount: this.realCacheMap.size,
       memoryUsedMB: realMemUsedMB,
-      hitRatePct: 99.4,
-      latencyMs: this.isRedisConnected ? 0.5 : 0.2
+      hitRatePct: null,
+      latencyMs: null
     };
   }
 }

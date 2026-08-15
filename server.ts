@@ -1296,7 +1296,7 @@ app.get(["/server.properties", "/api/download/server.properties"], (req, res) =>
   }
 });
 
-// Enterprise Sharding & Cluster Status API
+// Single Instance Status API
 app.get("/api/enterprise/status", requireAdminAuth, (req, res) => {
   const client = getClient();
   const guildCount = client?.guilds.cache.size || 0;
@@ -1305,17 +1305,15 @@ app.get("/api/enterprise/status", requireAdminAuth, (req, res) => {
   const cpuUsagePct = cpus.length > 0 ? os.loadavg()[0] / cpus.length * 100 : 1.0;
   const memUsage = process.memoryUsage();
   const uptimeMs = client?.uptime || Math.round(process.uptime() * 1000);
-  const shardCount = client?.ws ? 1 : 0;
   
   res.json({
-    highAvailability: true,
-    clusterCount: 1,
-    totalShards: shardCount || 1,
-    shards: [
+    deploymentType: "single-instance",
+    instanceCount: 1,
+    gatewayCount: client?.ws ? 1 : 0,
+    gateways: [
       {
-        clusterId: "Cluster-01",
-        shardId: 0,
-        status: client && client.isReady() ? "healthy" : "offline",
+        gatewayId: "gateway-01",
+        status: client && client.isReady() ? "connected" : "offline",
         guildCount: guildCount,
         ping: client?.ws ? client.ws.ping : 0,
         memoryUsageMB: Math.round(memUsage.heapUsed / 1024 / 1024),
@@ -1325,7 +1323,7 @@ app.get("/api/enterprise/status", requireAdminAuth, (req, res) => {
     ],
     zeroDowntimeRestartAvailable: true,
     hotReloadAvailable: true,
-    dbReplicationLagMs: null, // Set to actual value if using database replication monitoring
+    cacheReplicationLagMs: null, // Set to actual value if using cache replication monitoring
     lastBackupTime: new Date().toLocaleTimeString()
   });
 });
@@ -1689,8 +1687,8 @@ app.all(["/api/honeypot-trap", "/trap", "/trap/:guildId", "/trap/:guildId/:userI
     <h1>HONEYPOT TRAP TRIGGERED</h1>
     <p>You accessed a restricted honeypot canary URL monitored by ASHTRON Zero Trust Anti-Nuke Engine.</p>
     <div class="badge">IP BLACKLISTED: ${escapeHtml(clientIp)}</div>
-    <p style="color: #ef4444; font-weight: 600;">⛔ Your IP Address and associated Discord account have been permanently blacklisted & banned from the server.</p>
-    <div class="footer">ASHTRON Zero Trust Security Shield • 100/100 Anti-Nuke Core</div>
+    <p style="color: #ef4444; font-weight: 600;">⛔ Your IP Address and associated Discord account have been blocked & banned from the server.</p>
+    <div class="footer">ASHTRON Zero Trust Security Shield • Active Anti-Nuke Core</div>
   </div>
 </body>
 </html>
@@ -2286,30 +2284,27 @@ app.get("/api/economy/leaderboard", requireAdminAuth, (req, res) => {
     coins: u.coins + Math.floor(Math.random() * 200)
   }));
 
-  res.json({ success: true, leaderboard: demoUsers });
+  res.json({ success: true, leaderboard: demoUsers, isDemo: true });
 });
 
-// ==================== ENTERPRISE MONGO & REDIS ====================
+// ==================== CACHE & REDIS STATUS ====================
 
-app.get("/api/enterprise/mongo-redis", requireAdminAuth, (req, res) => {
+app.get("/api/enterprise/cache-status", requireAdminAuth, (req, res) => {
   res.json({
-    redisStats: MongoRedisEngine.getRedisStats(),
-    mongoBackupStatus: {
-      connected: MongoRedisEngine.isMongoConnected,
-      lastBackup: new Date(Date.now() - 3600000).toISOString(),
-      backupSizeMB: 14.8
-    }
+    cacheEngine: "Redis",
+    cacheStats: MongoRedisEngine.getRedisStats(),
+    note: "This endpoint reports cache/Redis status. MongoDB database backup is not currently implemented."
   });
 });
 
 app.post("/api/enterprise/mongo-backup", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   try {
-    logAdminAuditAction("PERFORM_MONGO_BACKUP", req);
+    logAdminAuditAction("PERFORM_CACHE_BACKUP", req);
     const result = await MongoRedisEngine.performMongoBackup();
-    addBotLog(`[ENTERPRISE] Created MongoDB Database Snapshot at ${result.timestamp}`, "success");
+    addBotLog(`[ENTERPRISE] Created Cache Backup at ${result.timestamp}`, "success");
     res.json(result);
   } catch (err: any) {
-    addBotLog(`[ENTERPRISE] MongoDB Backup failed: ${err.message}`, "error");
+    addBotLog(`[ENTERPRISE] Cache Backup failed: ${err.message}`, "error");
     res.status(500).json({ success: false, error: "Backup failed" });
   }
 });
@@ -2903,7 +2898,7 @@ TASK: Who is guilty + Why + What is the punishment.
 OUTPUT JSON: {"guilty":"@user","reason":"...","punishment":"7d_timeout"}
 
 ### FINAL RULE ###
-Your Goal: Server 100% safe + Members active + Owner's income increased.`,
+Your Goal: Server protected + Members active + Owner's income increased.`,
         tools: [{ googleSearch: {} }],
       },
       history: formattedHistory,

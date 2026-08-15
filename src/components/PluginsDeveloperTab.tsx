@@ -41,20 +41,20 @@ export default function PluginsDeveloperTab({ onAddLog }: PluginsDeveloperTabPro
 
   // Feature Flags
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([
-    { id: 'ff1', key: 'ENABLE_CLUSTER_SHARDING', name: 'Auto Sharding Cluster Engine', enabled: true, isBeta: false, description: 'Automatically balance guild gateway connections across cluster worker processes.' },
+    { id: 'ff1', key: 'ENABLE_CLUSTER_SHARDING', name: 'Gateway Connection Manager', enabled: true, isBeta: false, description: 'Manage Discord gateway connections for this single-instance deployment.' },
     { id: 'ff2', key: 'GEMINI_SEARCH_GROUNDING', name: 'Google Search Live Grounding', enabled: true, isBeta: false, description: 'Allow Gemini AI slash commands to perform live Google searches for current information.' },
     { id: 'ff3', key: 'VOICE_CHANNEL_TRANSCRIPTION', name: 'AI Voice Channel Transcription (Beta)', enabled: false, isBeta: true, description: 'Transcribe live voice conversations into text channels using speech-to-text models.' },
-    { id: 'ff4', key: 'ZERO_DOWNTIME_HOT_RELOAD', name: 'Zero Downtime Hot Code Reload', enabled: true, isBeta: false, description: 'Reload bot modules instantly without severing WebSocket gateway connections.' },
+    { id: 'ff4', key: 'ZERO_DOWNTIME_HOT_RELOAD', name: 'Zero Downtime Hot Code Reload', enabled: true, isBeta: false, description: 'Reload bot modules instantly without disrupting the Discord gateway connection.' },
     { id: 'ff5', key: 'GRAPHQL_GATEWAY', name: 'GraphQL Query Gateway', enabled: true, isBeta: false, description: 'Expose GraphQL endpoint for external custom dashboard integrations.' }
   ]);
 
   // API Keys
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([
     { id: 'k1', name: 'Production Mobile App Key', prefix: 'ent_live_9a8f...', created: '2026-07-15', type: 'REST' },
-    { id: 'k2', name: 'Realtime WebSocket Monitor', prefix: 'ent_ws_4b2c...', created: '2026-07-18', type: 'WebSocket' }
+    { id: 'k2', name: 'Realtime Telemetry Monitor', prefix: 'ent_evt_4b2c...', created: '2026-07-18', type: 'REST' }
   ]);
   const [newKeyName, setNewKeyName] = useState('');
-  const [newKeyType, setNewKeyType] = useState<'REST' | 'WebSocket' | 'GraphQL'>('REST');
+  const [newKeyType, setNewKeyType] = useState<'REST' | 'GraphQL'>('REST');
 
   // Custom Plugin Loader Code Sandbox
   const [customCode, setCustomCode] = useState(`// Custom Enterprise Plugin SDK Template
@@ -165,7 +165,7 @@ export default function initPlugin(bot) {
         {[
           { id: 'marketplace', icon: Puzzle, label: 'Plugin Marketplace & SDK' },
           { id: 'sdk', icon: Code, label: 'Custom Plugin Loader' },
-          { id: 'apis', icon: Globe, label: 'REST, WebSocket & GraphQL API' },
+                 { id: 'apis', icon: Globe, label: 'REST & GraphQL API' },
           { id: 'flags', icon: ToggleLeft, label: 'Feature Flags & Beta' },
           { id: 'devconsole', icon: Terminal, label: 'Developer Console & Remote Config' }
         ].map(tab => {
@@ -344,11 +344,11 @@ export default function initPlugin(bot) {
             <div className="bg-[#121212] rounded-xl p-5 border border-zinc-800/80 space-y-3 shadow-xs">
               <div className="flex items-center gap-2 text-purple-600">
                 <Radio className="w-5 h-5" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-zinc-100">WebSocket Live API</h3>
+                <h3 className="text-xs font-black uppercase tracking-wider text-zinc-100">HTTP Polling API</h3>
               </div>
-              <p className="text-xs text-zinc-500">Real-time WebSocket stream for instant telemetry and audit events.</p>
+              <p className="text-xs text-zinc-500">Polling-based telemetry and audit events (5-second intervals).</p>
               <div className="p-2.5 bg-[#18181b] rounded-lg border border-zinc-800 font-mono text-[10px] text-purple-700">
-                wss://app-url/api/ws/telemetry
+                GET /api/v1/telemetry/poll
               </div>
             </div>
 
@@ -386,7 +386,6 @@ export default function initPlugin(bot) {
                   className="px-2 py-1.5 border border-zinc-800 bg-[#18181b] rounded-lg text-xs font-semibold focus:outline-none"
                 >
                   <option value="REST">REST</option>
-                  <option value="WebSocket">WebSocket</option>
                   <option value="GraphQL">GraphQL</option>
                 </select>
                 <button

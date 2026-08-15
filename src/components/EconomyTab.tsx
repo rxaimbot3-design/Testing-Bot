@@ -99,6 +99,10 @@ export default function EconomyTab({ leaderboard, onAddLog }: EconomyTabProps) {
     <div className="space-y-6" id="economy-tab-container">
       {/* Economy Overview Hub */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="economy-hub-grid">
+        <div className="lg:col-span-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+          <p className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Demo Economy System</p>
+          <p className="text-[10px] text-amber-200/80 mt-1">Leaderboard data is simulated for demonstration purposes. No persistent economy database is attached.</p>
+        </div>
         {/* Wallet & Daily Claim Widget */}
         <div className="bg-[#121212] rounded-xl p-5 border border-zinc-800/80 flex flex-col justify-between shadow-xs">
           <div>
@@ -230,7 +234,7 @@ export default function EconomyTab({ leaderboard, onAddLog }: EconomyTabProps) {
             <Trophy className="w-5 h-5 text-amber-500" />
             <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">🏆 Server Leveling & Economy Leaderboard</h3>
           </div>
-          <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Weekly Refreshed</span>
+          <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Demo Data</span>
         </div>
 
         <div className="space-y-2">

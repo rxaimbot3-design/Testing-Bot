@@ -34,7 +34,7 @@ export default function TopFiveFeaturesBar() {
 
   const fetchTopStats = async () => {
     try {
-      // 1. Raid Prediction
+      // 1. Raid Prediction (statistical/heuristic model, not ML)
       const resRaid = await apiFetch('/api/security/ai-raid-prediction');
       if (resRaid.ok) {
         const dataRaid = await resRaid.json();
@@ -161,12 +161,12 @@ export default function TopFiveFeaturesBar() {
       {/* 5 Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         
-        {/* 1. AI Raid Prediction */}
+        {/* 1. Statistical Raid Prediction */}
         <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3.5 flex flex-col justify-between hover:border-indigo-500/50 transition-all">
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-black text-indigo-400 uppercase flex items-center gap-1">
-                🧠 1. AI Raid Prediction
+                 🧠 1. Statistical Raid Prediction
               </span>
               <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
                 raidPrediction.riskLevel === 'CRITICAL' ? 'bg-rose-500 text-white' : 'bg-emerald-500/20 text-emerald-400'
@@ -219,7 +219,7 @@ export default function TopFiveFeaturesBar() {
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-800/60 text-[10px] text-zinc-400 flex items-center justify-between">
             <span>Channels & Roles Saved</span>
-            <span className="text-emerald-400 font-bold">100% Safe</span>
+            <span className="text-emerald-400 font-bold">Protected</span>
           </div>
         </div>
 
@@ -282,13 +282,13 @@ export default function TopFiveFeaturesBar() {
               <span className="text-[11px] font-black text-purple-400 uppercase flex items-center gap-1">
                 🌍 5. Cluster & Sharding
               </span>
-              <span className="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded">
-                {shardingStatus?.totalShards || 1} Shard{shardingStatus?.totalShards !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <p className="text-[10px] text-zinc-400 mb-2">
-              Multi-cluster high availability with zero-downtime hot reloading.
-            </p>
+               <span className="text-[9px] font-bold text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded">
+                 {shardingStatus?.gatewayCount || 1} Gateway{(shardingStatus?.gatewayCount || 1) !== 1 ? 's' : ''}
+               </span>
+             </div>
+             <p className="text-[10px] text-zinc-400 mb-2">
+               Single-instance deployment with automatic restart on failure.
+             </p>
             <button
               onClick={handleHotRestart}
               className="w-full bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-[10px] font-bold py-1.5 rounded-lg transition-all"
@@ -297,9 +297,9 @@ export default function TopFiveFeaturesBar() {
             </button>
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-800/60 text-[10px] text-zinc-400 flex items-center justify-between">
-            <span>Ping: {shardingStatus?.shards?.[0]?.ping ?? 0}ms</span>
+            <span>Ping: {shardingStatus?.gateways?.[0]?.ping ?? 0}ms</span>
             <span className="text-purple-400 font-bold">
-              {shardingStatus?.shards?.[0]?.uptimeMinutes ? `${Math.round(shardingStatus.shards[0].uptimeMinutes / 60 * 100) / 100}h uptime` : 'Uptime monitoring'}
+              {shardingStatus?.gateways?.[0]?.uptimeMinutes ? `${Math.round(shardingStatus.gateways[0].uptimeMinutes / 60 * 100) / 100}h uptime` : 'Uptime monitoring'}
             </span>
           </div>
         </div>

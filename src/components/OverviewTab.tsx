@@ -110,7 +110,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           </div>
           <div>
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Shield Status</span>
-            <span className="text-2xl font-black text-zinc-100">100% Secure</span>
+            <span className="text-2xl font-black text-zinc-100">Secured</span>
           </div>
         </div>
 
@@ -140,7 +140,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
                 </span>
               </h3>
               <p className="text-xs text-zinc-400">
-                bot-er latency ebong response speed 100% optimize kora hoyeche.
+                bot-er latency ebong response speed optimized kora hoyeche.
               </p>
             </div>
           </div>
@@ -162,7 +162,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           <div className="bg-[#18181b] p-3 rounded-lg border border-zinc-800/60">
             <span className="font-bold text-emerald-400 block mb-1">⚡ Multithreaded Engine</span>
             <p className="text-zinc-400 text-[11px] leading-relaxed">
-              Node.js libuv 128-threadpool & WebSocket packet compression enabled. All events execute sub-10ms.
+              Node.js libuv 128-threadpool & HTTP polling enabled. All events execute within measured latency.
             </p>
           </div>
 

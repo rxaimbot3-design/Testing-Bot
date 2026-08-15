@@ -303,7 +303,7 @@ Run 100-nuker stress test drill (requires auth).
 ```json
 {
   "success": true,
-  "message": "Run 100 simultaneous advanced nukers stress test drill. 100% neutralized!",
+  "message": "Run 100 simultaneous advanced nukers stress test drill. All neutralized!",
   "stats": { "neutralized": 100, "bypasses": 0 }
 }
 ```
@@ -568,7 +568,7 @@ Get cluster and shard status (requires auth).
   ],
   "zeroDowntimeRestartAvailable": true,
   "hotReloadAvailable": true,
-  "dbReplicationLagMs": 0,
+  "cacheReplicationLagMs": 0,
   "lastBackupTime": "13:37:54"
 }
 ```
@@ -606,7 +606,7 @@ Hot reload security modules (requires auth, heavy rate limited).
 ```
 
 ### GET /api/enterprise/mongo-redis
-Get MongoDB and Redis statistics (requires auth).
+Get cache/Redis statistics (requires auth).
 
 **Response:**
 ```json
@@ -621,7 +621,7 @@ Get MongoDB and Redis statistics (requires auth).
 ```
 
 ### POST /api/enterprise/mongo-backup
-Create MongoDB backup (requires auth, heavy rate limited).
+Create cache/Redis backup (requires auth, heavy rate limited).
 
 **Response:**
 ```json
@@ -1058,7 +1058,7 @@ Activate premium license (requires auth).
 
 ---
 
-## WebSocket Events
+## Dashboard Updates
 
 The dashboard supports real-time updates via HTTP polling (5-second intervals). Native WebSocket support is planned for future releases.
 

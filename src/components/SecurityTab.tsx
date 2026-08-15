@@ -61,7 +61,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
       title: "Layer 2 – Detection",
       desc: "Real-time threat monitoring and multi-vector attack signal correlation.",
       items: [
-        { name: "Real-Time Audit Log Monitoring", status: "ACTIVE", desc: "Stream audit log events instantly via Gateway WebSocket connection." },
+        { name: "Real-Time Audit Log Monitoring", status: "ACTIVE", desc: "Stream audit log events via HTTP polling (5-second intervals)." },
         { name: "Multi-Event Correlation", status: "ACTIVE", desc: "Correlate simultaneous channel deletes, role edits, and webhook triggers across admins." },
         { name: "Burst Action Detection", status: "ACTIVE", desc: "Flag velocity bursts (>2 destructive actions in 3 seconds) instantly." },
         { name: "Mass Delete Detection", status: "ACTIVE", desc: "Intercept mass channel/role deletion attacks in < 5ms." },
@@ -94,7 +94,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
         { name: "Permission Rollback", status: "READY", desc: "Revert altered permission overwrites to last verified clean snapshot." },
         { name: "Configuration Rollback", status: "READY", desc: "Restore server icon, name, vanity URL, and verification settings." },
         { name: "Versioned Backups", status: "READY", desc: "Automated hourly encrypted snapshot backups saved to secure storage." },
-        { name: "One-Click Recovery", status: "READY", desc: "Single button trigger to restore full server structure in < 2 seconds." },
+        { name: "One-Click Recovery", status: "READY", desc: "Single button trigger to restore server structure from snapshot. Restoration time depends on server size." },
         { name: "Backup Integrity Verification", status: "READY", desc: "Cryptographic sha256 checksum validation for all saved server snapshots." }
       ]
     },
@@ -103,8 +103,8 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
       title: "Layer 5 – Monitoring",
       desc: "Live visibility, health metrics, breach alerts, and executive threat reporting.",
       items: [
-        { name: "Live Security Dashboard", status: "ONLINE", desc: "Real-time web control panel with live gateway event websocket stream." },
-        { name: "Security Health Score", status: "100 / 100", desc: "Algorithmic security index evaluating active defenses and permission risks." },
+        { name: "Live Security Dashboard", status: "ONLINE", desc: "Real-time web control panel with polling-based event feed." },
+        { name: "Security Health Score", status: "Calculated", desc: "Algorithmic security index evaluating active defenses and permission risks." },
         { name: "Threat Timeline", status: "RECORDING", desc: "Chronological event ledger recording all security breaches and automated responses." },
         { name: "Incident Reports", status: "GENERATING", desc: "Detailed post-incident audit breakdown for server owners and security staff." },
         { name: "Security Analytics", status: "ONLINE", desc: "Visual graphs tracking attack frequency, threat origins, and defense latency." },
@@ -116,8 +116,8 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
       title: "Layer 6 – Reliability",
       desc: "High availability infrastructure, auto-sharding, and crash resilience.",
       items: [
-        { name: "Auto Sharding", status: "ACTIVE", desc: "Dynamic Discord gateway shard balancing across large server clusters." },
-        { name: "High Availability", status: "99.99%", desc: "Cloud Run containerized execution with redundant failover processes." },
+        { name: "Single-Instance Gateway", status: "ACTIVE", desc: "Single Discord gateway connection for this deployment." },
+        { name: "High Availability", status: "Process-Level", desc: "Single-process execution with automatic restart on failure." },
         { name: "Automatic Restart", status: "ACTIVE", desc: "Zero-downtime auto restart system recovering from network glitches." },
         { name: "Crash Recovery", status: "ACTIVE", desc: "State preservation system ensuring bot resumes without losing threat state." },
         { name: "Health Monitoring", status: "ONLINE", desc: "Continuous latency, memory usage, and gateway heartbeat ping checks." },
@@ -252,7 +252,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
     { id: 'zt-3', category: 'zerotrust', name: 'Strict Whitelist Verification Model', desc: 'Enforce explicit cryptographic token approval for any role assignment.', enabled: true },
     { id: 'zt-4', category: 'zerotrust', name: 'Real-Time Threat Analysis Engine', desc: 'Continuous gateway event analysis measuring velocity spikes.', enabled: true },
     { id: 'zt-5', category: 'zerotrust', name: '❄️ Absolute Zero-Trust: Admin Action Freeze', desc: 'Freeze all non-whitelisted admins/staff. Server Owner and Whitelisted Members maintain full access to perform all actions.', enabled: false },
-    { id: 'zt-6', category: 'zerotrust', name: '🔨 Zero-Trust IP-Ban & Blacklist', desc: 'Owner-Only: Ban user accounts and permanently blacklist their IP addresses from the server.', enabled: true, ownerOnly: true },
+    { id: 'zt-6', category: 'zerotrust', name: '🔨 Zero-Trust IP Reputation & Enforcement', desc: 'Owner-Only: Ban user accounts and enforce internal IP reputation blacklist for server access.', enabled: true, ownerOnly: true },
     { id: 'zt-7', category: 'zerotrust', name: '🚫 Anti-Invite Link Shield', desc: 'Auto-Ban anyone (members/bots) sending invite links. Owner and Whitelisted Admins are exempt.', enabled: true, ownerOnly: true },
 
     // Anti-Nuke
@@ -281,7 +281,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
 
     // AI Security
     { id: 'ai-1', category: 'aisecurity', name: 'AI Threat Detection & Suspicious Behavior Analysis', desc: 'Gemini 2.5 Flash deep pattern scanner monitoring message velocity.', enabled: true },
-    { id: 'ai-2', category: 'aisecurity', name: 'AI Raid Prediction & Dynamic Security Score', desc: 'Predict potential raid attempts using historical server interaction sentiment.', enabled: true },
+    { id: 'ai-2', category: 'aisecurity', name: 'Statistical Raid Prediction & Dynamic Security Score', desc: 'Predict potential raid attempts using historical server interaction sentiment.', enabled: true },
     { id: 'ai-3', category: 'aisecurity', name: 'AI Auto Incident Reporting & Automated Response', desc: 'Generate real-time executive security breach reports with instant mitigation.', enabled: true }
   ]);
 
@@ -299,7 +299,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
   const handleOneClickRestore = (componentName: string) => {
     setRecoveryStatus(`Restoring ${componentName} from last encrypted snapshot...`);
     setTimeout(() => {
-      setRecoveryStatus(`✅ Instant ${componentName} Restore completed! 100% permissions restored.`);
+      setRecoveryStatus(`✅ Instant ${componentName} Restore completed! Permissions restored.`);
       onSimulateRaid(`Executed One-Click Instant ${componentName} Restore.`);
     }, 1200);
   };
@@ -538,12 +538,12 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
-                'Instant Channel Restore',
-                'Instant Role Restore',
-                'Instant Permission Restore',
-                'Instant Webhook Restore',
-                'Instant Emoji Restore',
-                'Instant Sticker Restore'
+                'Channel Restore',
+                'Role Restore',
+                'Permission Restore',
+                'Webhook Restore',
+                'Emoji Restore',
+                'Sticker Restore'
               ].map((item, idx) => (
                 <div key={idx} className="p-3.5 bg-[#18181b] rounded-xl border border-zinc-800 flex flex-col justify-between gap-3">
                   <span className="text-xs font-extrabold text-zinc-100">{item}</span>

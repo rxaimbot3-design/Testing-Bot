@@ -120,7 +120,7 @@
 - Token vault self-destruct
 
 **Mitigation:**
-- Attacker IP permanently banned
+- Attacker IP added to internal reputation blacklist and Discord account banned
 - All secrets wiped from memory
 - Admin notified of breach location
 
