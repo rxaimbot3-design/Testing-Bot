@@ -307,17 +307,53 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
 }
 
 // Sliding Window Rate Limiting Middleware
+// Uses Redis sorted sets when available for multi-instance consistency;
+// falls back to in-memory sliding window otherwise.
 class RateLimiterMiddleware {
   private static requests = new Map<string, number[]>();
+  private static redisAvailable = false;
+
+  static async initRedis(): Promise<void> {
+    try {
+      await MongoRedisEngine.initRedis();
+      RateLimiterMiddleware.redisAvailable = MongoRedisEngine.isRedisAvailable();
+    } catch {
+      RateLimiterMiddleware.redisAvailable = false;
+    }
+  }
 
   public static limit(windowMs: number, maxRequests: number, keyPrefix = "") {
-    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
       const ip = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
       const key = `${keyPrefix}:${ip}`;
       const now = Date.now();
-      const timestamps = RateLimiterMiddleware.requests.get(key) || [];
 
-      // Filter out old timestamps
+      if (RateLimiterMiddleware.redisAvailable) {
+        try {
+          const client = MongoRedisEngine['redisClient'];
+          if (client) {
+            const windowStart = now - windowMs;
+            const redisKey = `ratelimit:${key}`;
+            await client.zRemRangeByScore(redisKey, 0, windowStart);
+            await client.zAdd(redisKey, { score: now, value: `${now}:${Math.random()}` });
+            await client.expire(redisKey, Math.ceil(windowMs / 1000));
+            const count = await client.zCard(redisKey);
+            if (count >= maxRequests) {
+              addBotLog(`⚠️ [RATE LIMIT] Exceeded rate limit for IP ${ip} on ${req.path}`, "warning");
+              return res.status(429).json({
+                success: false,
+                error: "Too many requests. Please slow down and try again later."
+              });
+            }
+            return next();
+          }
+        } catch {
+          RateLimiterMiddleware.redisAvailable = false;
+        }
+      }
+
+      // In-memory fallback
+      const timestamps = RateLimiterMiddleware.requests.get(key) || [];
       const validTimestamps = timestamps.filter(t => now - t < windowMs);
 
       if (validTimestamps.length >= maxRequests) {
@@ -2815,11 +2851,15 @@ async function setupServer() {
     });
   }
 
-  httpServer = app.listen(PORT, "0.0.0.0", async () => {
+   httpServer = app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on port ${PORT}`);
     // Initialize Redis connection if configured
     await MongoRedisEngine.initRedis().catch((err) => {
       console.warn("Redis initialization failed:", err);
+    });
+    // Initialize Redis-backed rate limiter
+    await RateLimiterMiddleware.initRedis().catch((err) => {
+      console.warn("Redis rate limiter initialization failed:", err);
     });
     // Auto-start Discord Bot on startup
     startDiscordBot().catch((err) => {

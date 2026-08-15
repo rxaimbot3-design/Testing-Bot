@@ -19,7 +19,7 @@ export class AuditLogQueue {
   private readonly flushIntervalMs: number;
   private readonly logDir: string;
   private currentLogFile: string;
-  private currentLogSize: number = 0;
+  private currentSize: number = 0;
   private readonly maxLogSize: number = 10 * 1024 * 1024; // 10MB
 
   constructor(options: {
@@ -93,7 +93,7 @@ export class AuditLogQueue {
       existing.push(...batch);
 
       atomicWriteJsonSync(this.currentLogFile, existing);
-      this.currentLogSize += JSON.stringify(batch).length;
+      this.currentSize += JSON.stringify(batch).length;
     } catch (err) {
       console.error("[AUDIT LOG] Failed to write batch:", err);
       // Re-queue failed batch (but limit requeue to prevent infinite loop)
@@ -110,9 +110,20 @@ export class AuditLogQueue {
   }
 
   private rotateLogIfNeeded(): void {
-    if (!this.logDir || this.currentLogSize >= this.maxLogSize) {
+    if (!this.logDir) return;
+    let currentSize = 0;
+    try {
+      if (fs.existsSync(this.currentLogFile)) {
+        currentSize = fs.statSync(this.currentLogFile).size;
+      }
+    } catch {
+      // ignore stat errors
+    }
+    if (currentSize >= this.maxLogSize) {
       this.currentLogFile = this.getLogFilePath();
-      this.currentLogSize = 0;
+      this.currentSize = 0;
+    } else {
+      this.currentSize = currentSize;
     }
   }
 
