@@ -26,7 +26,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install ALL dependencies including devDependencies for build
-RUN npm ci --no-audit --no-fund --production=false
+RUN npm ci --no-audit --no-fund --production=false --legacy-peer-deps
 
 # Copy source code
 COPY . .

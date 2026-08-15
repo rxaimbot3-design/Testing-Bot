@@ -16,7 +16,7 @@ import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { startDiscordBot, stopDiscordBot, getDiscordBotStatus, toggleLockdown , addBotLog, sendGitHubAlert, getSecurityStats, runNukeDefenseDrill, triggerHoneypotTrap, getClient } from "./discord-bot";
+import { startDiscordBot, stopDiscordBot, getDiscordBotStatus, toggleLockdown , addBotLog, sendGitHubAlert, getSecurityStats, runNukeDefenseDrill, triggerHoneypotTrap, getClient, saveWhitelistState } from "./discord-bot";
 import { 
   BehaviorScoring, HoneypotAdminRole, SessionHijackDetector, OAuthMaliciousAppDetector, 
   BotTokenRotationSystem, AutoPermissionRollback, ServerSnapshotRestore, AntiVanityHijack, 
