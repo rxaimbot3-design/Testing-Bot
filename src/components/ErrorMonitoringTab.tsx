@@ -245,6 +245,7 @@ export default function ErrorMonitoringTab({ onAddLog }: ErrorMonitoringTabProps
             ))}
           </div>
         </div>
+        </div>
       )}
     </div>
   );
