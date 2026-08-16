@@ -297,6 +297,7 @@ export default function BackupStatusTab({ onAddLog }: BackupStatusTabProps) {
             ))}
           </div>
         </div>
+        </div>
       )}
     </div>
   );
