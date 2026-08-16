@@ -69,8 +69,8 @@ describe("Backup API: Extended Coverage", () => {
     expect(res.status).toBe(401);
   });
 
-  it("requires auth for mongo backup", async () => {
-    const res = await request(app).post("/api/enterprise/mongo-backup").send({});
+  it("requires auth for cache backup", async () => {
+    const res = await request(app).post("/api/enterprise/cache-backup").send({});
     expect(res.status).toBe(401);
   });
 

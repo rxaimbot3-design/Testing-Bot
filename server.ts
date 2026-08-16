@@ -560,7 +560,7 @@ export function trackError(message: string, source = "server", stack?: string, s
 const MAX_HISTORY = 60;
 const latencyHistory: Array<{ timestamp: string; p50: number; p95: number; p99: number; eventType: string }> = [];
 const throughputHistory: Array<{ timestamp: string; eventsPerSecond: number; byType: Record<string, number> }> = [];
-const backupHistory: Array<{ id: string; timestamp: string; status: 'success' | 'failed' | 'in_progress'; size: string; duration: string; type: 'full' | 'incremental' | 'snapshot'; verified: boolean }> = [];
+const backupHistory: Array<{ id: string; timestamp: string; status: 'success' | 'failed' | 'in_progress'; size: string; duration: string; type: 'full' | 'incremental' | 'snapshot'; verified: 'pending' | 'integrity-checked' | 'restore-tested' | 'verified' }> = [];
 const eventTypes = ['security', 'moderation', 'ai', 'voice', 'utility', 'integration'];
 const riskScoreHistory: Array<{ date: string; score: number }> = [];
 const MAX_RISK_HISTORY = 30;
@@ -589,6 +589,55 @@ function recordRiskScoreSnapshot(score: number) {
     riskScoreHistory.push({ date: today, score });
     if (riskScoreHistory.length > MAX_RISK_HISTORY) riskScoreHistory.shift();
   }
+}
+
+// Persist risk score history to disk for survival across restarts
+const RISK_HISTORY_FILE = path.join(process.cwd(), "data", "risk_score_history.json");
+function saveRiskScoreHistory() {
+  try {
+    if (!fs.existsSync(path.join(process.cwd(), "data"))) fs.mkdirSync(path.join(process.cwd(), "data"), { recursive: true });
+    fs.writeFileSync(RISK_HISTORY_FILE, JSON.stringify(riskScoreHistory, null, 2));
+  } catch (err) {
+    console.error("[RISK_HISTORY] Failed to persist:", err.message);
+  }
+}
+function loadRiskScoreHistory() {
+  try {
+    if (fs.existsSync(RISK_HISTORY_FILE)) {
+      const raw = fs.readFileSync(RISK_HISTORY_FILE, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        riskScoreHistory.push(...parsed.slice(-MAX_RISK_HISTORY));
+      }
+    }
+  } catch (err) {
+    console.error("[RISK_HISTORY] Failed to load:", err.message);
+  }
+}
+
+// Automatic backup scheduler: runs every 6 hours
+function startBackupScheduler() {
+  setInterval(async () => {
+    try {
+      const result = await MongoRedisEngine.performCacheBackup();
+      const durationMs = Date.now() - lastBackupTimestamp;
+      const durationSec = Math.max(0, durationMs / 1000).toFixed(1);
+      lastBackupTimestamp = Date.now();
+      backupHistory.push({
+        id: `backup-${Date.now()}`,
+        timestamp: result.timestamp,
+        status: result.success ? 'success' : 'failed',
+        size: `${result.backupSizeMB || 0} MB`,
+        duration: `${durationSec}s`,
+        type: 'full',
+        verified: result.success ? 'integrity-checked' : 'pending'
+      });
+      if (backupHistory.length > MAX_HISTORY) backupHistory.shift();
+      addBotLog(`[ENTERPRISE] Scheduled Cache Backup at ${result.timestamp}`, "success");
+    } catch (err: any) {
+      addBotLog(`[ENTERPRISE] Scheduled Cache Backup failed: ${err.message}`, "error");
+    }
+  }, 6 * 60 * 60 * 1000); // every 6 hours
 }
 
 function pushLatencySample(cppMetrics: any) {
@@ -2372,15 +2421,16 @@ app.get("/api/enterprise/cache-status", requireAdminAuth, (req, res) => {
   });
 });
 
-app.post("/api/enterprise/mongo-backup", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
+app.post("/api/enterprise/cache-backup", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   try {
     logAdminAuditAction("PERFORM_CACHE_BACKUP", req);
     const startTime = Date.now();
-    const result = await MongoRedisEngine.performMongoBackup();
+    const result = await MongoRedisEngine.performCacheBackup();
     const durationMs = Date.now() - startTime;
     const durationSec = Math.max(0, durationMs / 1000).toFixed(1);
     addBotLog(`[ENTERPRISE] Created Cache Backup at ${result.timestamp}`, "success");
     // Record backup in history for dashboard
+    const verificationState = result.success ? 'integrity-checked' : 'pending';
     backupHistory.push({
       id: `backup-${Date.now()}`,
       timestamp: result.timestamp,
@@ -2388,7 +2438,7 @@ app.post("/api/enterprise/mongo-backup", requireAdminAuth, heavyOpRateLimit, asy
       size: `${result.backupSizeMB || 0} MB`,
       duration: `${durationSec}s`,
       type: 'snapshot',
-      verified: result.success
+      verified: verificationState
     });
     if (backupHistory.length > MAX_HISTORY) backupHistory.shift();
     res.json({ ...result, duration: `${durationSec}s` });
@@ -3086,7 +3136,7 @@ app.get("/api/analytics/backups", requireAdminAuth, (req, res) => {
     backupDuration: data[0].duration,
     successCount: data.filter(b => b.status === 'success').length,
     failedCount: data.filter(b => b.status === 'failed').length,
-    verifiedCount: data.filter(b => b.verified).length
+    verifiedCount: data.filter(b => b.verified && b.verified !== 'pending').length
   } : {
     lastBackup: 'Never',
     nextBackup: getNextBackupTime(),
@@ -3104,12 +3154,13 @@ app.post("/api/analytics/backups", requireAdminAuth, heavyOpRateLimit, async (re
   try {
     logAdminAuditAction("MANUAL_BACKUP_INITIATED", req);
     const startTime = Date.now();
-    const result = await MongoRedisEngine.performMongoBackup();
+    const result = await MongoRedisEngine.performCacheBackup();
     const durationMs = Date.now() - startTime;
     const durationSec = Math.max(0, durationMs / 1000).toFixed(1);
     lastBackupTimestamp = Date.now();
     addBotLog(`[ENTERPRISE] Manual Cache Backup at ${result.timestamp}`, "success");
     // Record backup in history for dashboard
+    const verificationState = result.success ? 'integrity-checked' : 'pending';
     backupHistory.push({
       id: `backup-${Date.now()}`,
       timestamp: result.timestamp,
@@ -3117,7 +3168,7 @@ app.post("/api/analytics/backups", requireAdminAuth, heavyOpRateLimit, async (re
       size: `${result.backupSizeMB || 0} MB`,
       duration: `${durationSec}s`,
       type: 'full',
-      verified: result.success
+      verified: verificationState
     });
     if (backupHistory.length > MAX_HISTORY) backupHistory.shift();
     res.json({ success: true, backup: backupHistory[backupHistory.length - 1] });
@@ -3280,6 +3331,10 @@ async function setupServer() {
     await RateLimiterMiddleware.initRedis().catch((err) => {
       console.warn("Redis rate limiter initialization failed:", err);
     });
+    // Load persisted risk score history
+    loadRiskScoreHistory();
+    // Start automatic backup scheduler
+    startBackupScheduler();
     // Auto-start Discord Bot on startup
     startDiscordBot().catch((err) => {
       console.error("Failed to auto-start Discord bot:", err);

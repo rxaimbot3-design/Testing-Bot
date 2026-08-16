@@ -20,7 +20,7 @@ interface BackupEntry {
   size: string;
   duration: string;
   type: 'full' | 'incremental' | 'snapshot';
-  verified: boolean;
+  verified: 'pending' | 'integrity-checked' | 'restore-tested' | 'verified';
 }
 
 interface BackupStatusTabProps {
@@ -249,7 +249,7 @@ export default function BackupStatusTab({ onAddLog }: BackupStatusTabProps) {
                       <td className="px-4 py-3 text-xs text-zinc-300">{backup.size}</td>
                       <td className="px-4 py-3 text-xs text-zinc-300">{backup.duration}</td>
                       <td className="px-4 py-3">
-                        {backup.verified ? (
+                        {backup.verified && backup.verified !== 'pending' ? (
                           <CheckCircle className="w-4 h-4 text-emerald-400" />
                         ) : (
                           <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -283,7 +283,7 @@ export default function BackupStatusTab({ onAddLog }: BackupStatusTabProps) {
         <div className="bg-[#18181b] rounded-xl p-4 border border-zinc-800/60">
           <h3 className="text-sm font-bold text-zinc-300 mb-3">Restore Testing Results</h3>
           <div className="space-y-2">
-            {backups.filter(b => b.verified).slice(0, 5).map(backup => (
+            {backups.filter(b => b.verified && b.verified !== 'pending').slice(0, 5).map(backup => (
               <div key={backup.id} className="flex items-center justify-between p-3 bg-[#121212] rounded-lg border border-zinc-800/40">
                 <div className="flex items-center gap-3">
                   <CheckCircle className="w-4 h-4 text-emerald-400" />
