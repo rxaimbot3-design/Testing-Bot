@@ -9,6 +9,7 @@ import {
   ShieldX,
   Code
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface ErrorMonitoringTabProps {
   onAddLog?: (action: string, severity: 'low' | 'medium' | 'high' | 'critical') => void;
@@ -30,50 +31,45 @@ export default function ErrorMonitoringTab({ onAddLog }: ErrorMonitoringTabProps
   const [errors, setErrors] = useState<ErrorEntry[]>([]);
   const [selectedError, setSelectedError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<string>('24h');
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [rateHistory, setRateHistory] = useState<Array<{ hour: number; errors: number }>>([]);
+  const [stats, setStats] = useState({ totalErrors: 0, criticalErrors: 0, avgPerHour: 0, uniqueTypes: 0, last5min: 0, last1hour: 0 });
+
+  const fetchErrors = async () => {
+    try {
+      setApiError(null);
+      const res = await apiFetch('/api/analytics/errors');
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.success) {
+        const mappedErrors: ErrorEntry[] = (data.errors || []).map((err: any, idx: number) => ({
+          id: err.id || `err-${Date.now()}-${idx}`,
+          timestamp: err.timestamp || new Date().toISOString(),
+          type: err.type || 'General',
+          message: err.message || 'Unknown error',
+          stackTrace: err.stack || err.stackTrace || '',
+          count: 1,
+          firstSeen: err.timestamp || new Date().toISOString(),
+          lastSeen: err.timestamp || new Date().toISOString(),
+          severity: (err.severity as ErrorEntry['severity']) || 'medium'
+        }));
+        setErrors(mappedErrors);
+        setRateHistory(data.rateHistory || []);
+        if (data.stats) setStats(data.stats);
+      }
+    } catch (err: any) {
+      setApiError(err.message || 'Failed to fetch error data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const generateErrors = (): ErrorEntry[] => {
-      const now = Date.now();
-      const errorTypes = [
-        { type: 'UnhandledPromiseRejection', message: 'Promise rejection not handled', severity: 'high' as const },
-        { type: 'TypeError', message: 'Cannot read properties of undefined', severity: 'medium' as const },
-        { type: 'DiscordAPIError', message: 'Discord API rate limit exceeded', severity: 'medium' as const },
-        { type: 'DatabaseConnectionError', message: 'Failed to connect to database', severity: 'critical' as const },
-        { type: 'MemoryError', message: 'JavaScript heap out of memory', severity: 'critical' as const },
-        { type: 'NetworkTimeout', message: 'Request timeout after 30000ms', severity: 'medium' as const },
-        { type: 'ValidationError', message: 'Invalid input validation failed', severity: 'low' as const },
-        { type: 'AuthenticationError', message: 'Invalid or expired token', severity: 'high' as const }
-      ];
-
-      return Array.from({ length: 25 }, (_, i) => {
-        const errorType = errorTypes[Math.floor(Math.random() * errorTypes.length)];
-        const firstSeen = new Date(now - Math.floor(Math.random() * 86400000 * 7));
-        const lastSeen = new Date(now - Math.floor(Math.random() * 86400000));
-        return {
-          id: `err-${Date.now()}-${i}`,
-          timestamp: lastSeen.toISOString(),
-          type: errorType.type,
-          message: errorType.message,
-          stackTrace: `Error: ${errorType.message}\n    at processTicksAndRejections (node:internal/process/task_queues:96:5)\n    at async ${errorType.type}Handler (/src/services/handler.ts:42:18)\n    at async handleRequest (/src/api/routes.ts:18:22)`,
-          count: Math.floor(Math.random() * 50 + 1),
-          firstSeen: firstSeen.toISOString(),
-          lastSeen: lastSeen.toISOString(),
-          severity: errorType.severity
-        };
-      }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    };
-
-    setErrors(generateErrors());
+    fetchErrors();
+    const interval = setInterval(fetchErrors, 5000);
+    return () => clearInterval(interval);
   }, [timeRange]);
-
-  const errorRateHistory = Array.from({ length: 24 }, (_, i) => ({
-    hour: i,
-    errors: Math.floor(Math.random() * 20 + 5)
-  }));
-
-  const totalErrors = errors.reduce((a, b) => a + b.count, 0);
-  const criticalErrors = errors.filter(e => e.severity === 'critical').length;
-  const avgErrorsPerHour = totalErrors / 24;
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -86,7 +82,17 @@ export default function ErrorMonitoringTab({ onAddLog }: ErrorMonitoringTabProps
 
   return (
     <div className="space-y-6" id="error-monitoring-tab">
-      <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
+      {apiError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-400 font-bold">
+          Failed to load error data: {apiError}
+        </div>
+      )}
+      {loading ? (
+        <div className="bg-[#121212] rounded-2xl p-12 border border-zinc-800/80 shadow-xs flex items-center justify-center">
+          <span className="text-xs text-zinc-400 font-bold">Loading error telemetry...</span>
+        </div>
+      ) : (
+        <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center text-red-600">
@@ -112,33 +118,36 @@ export default function ErrorMonitoringTab({ onAddLog }: ErrorMonitoringTabProps
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-[#18181b] rounded-xl p-4 border border-zinc-800/60">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Total Errors</span>
-            <span className="text-2xl font-black text-red-400">{totalErrors}</span>
+            <span className="text-2xl font-black text-red-400">{stats.totalErrors}</span>
           </div>
           <div className="bg-[#18181b] rounded-xl p-4 border border-zinc-800/60">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Critical Errors</span>
-            <span className="text-2xl font-black text-purple-400">{criticalErrors}</span>
+            <span className="text-2xl font-black text-purple-400">{stats.criticalErrors}</span>
           </div>
           <div className="bg-[#18181b] rounded-xl p-4 border border-zinc-800/60">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Avg/Hour</span>
-            <span className="text-2xl font-black text-zinc-100">{avgErrorsPerHour.toFixed(1)}</span>
+            <span className="text-2xl font-black text-zinc-100">{stats.avgPerHour.toFixed(1)}</span>
           </div>
           <div className="bg-[#18181b] rounded-xl p-4 border border-zinc-800/60">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Unique Types</span>
-            <span className="text-2xl font-black text-indigo-400">{new Set(errors.map(e => e.type)).size}</span>
+            <span className="text-2xl font-black text-indigo-400">{stats.uniqueTypes}</span>
           </div>
         </div>
 
         <div className="mb-6">
           <h3 className="text-sm font-bold text-zinc-300 mb-3">Error Rate Trend</h3>
           <div className="h-40 flex items-end gap-1">
-            {errorRateHistory.map((data) => (
-              <div
-                key={data.hour}
-                className="flex-1 bg-red-500/80 rounded-t hover:bg-red-400 transition-all cursor-pointer"
-                style={{ height: `${(data.errors / Math.max(...errorRateHistory.map(d => d.errors))) * 100}%`, minHeight: '4px' }}
-                title={`${data.errors} errors at ${data.hour}:00`}
-              />
-            ))}
+            {rateHistory.map((data) => {
+              const maxErrors = Math.max(...rateHistory.map(d => d.errors), 1);
+              return (
+                <div
+                  key={data.hour}
+                  className="flex-1 bg-red-500/80 rounded-t hover:bg-red-400 transition-all cursor-pointer"
+                  style={{ height: `${(data.errors / maxErrors) * 100}%`, minHeight: '4px' }}
+                  title={`${data.errors} errors at ${data.hour}:00`}
+                />
+              );
+            })}
           </div>
           <div className="flex items-center justify-between mt-2 text-[10px] text-zinc-500 font-medium">
             <span>24h ago</span>
@@ -236,7 +245,7 @@ export default function ErrorMonitoringTab({ onAddLog }: ErrorMonitoringTabProps
             ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

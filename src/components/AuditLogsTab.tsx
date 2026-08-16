@@ -13,6 +13,7 @@ import {
   ChevronUp,
   Eye
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface AuditLogEntry {
   id: string;
@@ -41,36 +42,40 @@ export default function AuditLogsTab({ onAddLog }: AuditLogsTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const logsPerPage = 15;
 
-  const actions = ['LOGIN', 'LOGOUT', 'ADMIN_AUTH', 'BACKUP', 'RESTORE', 'LOCKDOWN', 'CONFIG_CHANGE', 'USER_BAN', 'API_CALL', 'SECURITY_SCAN'];
-  const users = ['admin', 'system', 'bot', 'api_service', 'scheduler'];
+  const uniqueUsers = useMemo(() => {
+    const set = new Set(logs.map(l => l.actor).filter(Boolean));
+    return Array.from(set).sort();
+  }, [logs]);
 
   useEffect(() => {
-    const generateLogs = (): AuditLogEntry[] => {
-      const now = Date.now();
-      return Array.from({ length: 100 }, (_, i) => {
-        const action = actions[Math.floor(Math.random() * actions.length)];
-        const statuses: AuditLogEntry['status'][] = ['success', 'success', 'success', 'failure', 'warning'];
-        const severities: AuditLogEntry['severity'][] = ['low', 'low', 'medium', 'high', 'critical'];
-        return {
-          id: `log-${Date.now()}-${i}`,
-          timestamp: new Date(now - Math.floor(Math.random() * 86400000)).toISOString(),
-          action,
-          actor: users[Math.floor(Math.random() * users.length)],
-          ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          severity: severities[Math.floor(Math.random() * severities.length)],
-          status: statuses[Math.floor(Math.random() * statuses.length)],
-          details: {
-            endpoint: `/api/${action.toLowerCase()}`,
-            method: ['GET', 'POST', 'PUT', 'DELETE'][Math.floor(Math.random() * 4)],
-            durationMs: Math.floor(Math.random() * 500 + 10),
-            sessionId: `sess_${Math.random().toString(36).substring(2, 15)}`
+    const fetchLogs = async () => {
+      try {
+        const res = await apiFetch('/api/admin/audit-logs?limit=100');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.logs)) {
+            const mapped: AuditLogEntry[] = data.logs.map((entry: any, idx: number) => ({
+              id: entry.id || `log-${Date.now()}-${idx}`,
+              timestamp: entry.timestamp || new Date().toISOString(),
+              action: entry.action || 'UNKNOWN',
+              actor: entry.actor || entry.actorIp || 'system',
+              ip: entry.actorIp || entry.ip || '0.0.0.0',
+              userAgent: entry.userAgent,
+              severity: entry.severity || 'medium',
+              status: entry.status || 'success',
+              details: entry.details
+            }));
+            setLogs(mapped);
           }
-        };
-      }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        }
+      } catch (err) {
+        console.error('Failed to fetch audit logs:', err);
+      }
     };
 
-    setLogs(generateLogs());
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 10000);
+    return () => clearInterval(interval);
   }, [timeRange]);
 
   const filteredLogs = useMemo(() => {
@@ -201,7 +206,7 @@ export default function AuditLogsTab({ onAddLog }: AuditLogsTabProps) {
               className="bg-[#121212] border border-zinc-700 rounded-xl px-3 py-2.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
             >
               <option value="all">All Users</option>
-              {users.map(user => (
+              {uniqueUsers.map(user => (
                 <option key={user} value={user}>{user}</option>
               ))}
             </select>
