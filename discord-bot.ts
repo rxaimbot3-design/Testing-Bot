@@ -74,7 +74,7 @@ export class GDPRPrivacyEngine {
     return {
       userId,
       exportedAt: new Date().toISOString(),
-      privacyCompliance: "GDPR Compliant",
+      privacyCompliance: "GDPR-oriented privacy controls",
       trackedViolations: userViolations.get(userId) || null,
       ipBanStatus: IPBanSystem.isBanned(userId) ? "Active Ban" : "Clean",
       dataRetentionPolicy: "Transient logs only, no persistent database tracking of message text."

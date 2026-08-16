@@ -562,16 +562,43 @@ const latencyHistory: Array<{ timestamp: string; p50: number; p95: number; p99: 
 const throughputHistory: Array<{ timestamp: string; eventsPerSecond: number; byType: Record<string, number> }> = [];
 const backupHistory: Array<{ id: string; timestamp: string; status: 'success' | 'failed' | 'in_progress'; size: string; duration: string; type: 'full' | 'incremental' | 'snapshot'; verified: boolean }> = [];
 const eventTypes = ['security', 'moderation', 'ai', 'voice', 'utility', 'integration'];
+const riskScoreHistory: Array<{ date: string; score: number }> = [];
+const MAX_RISK_HISTORY = 30;
 
-function pushLatencySample(latencyMicros: number, status: string) {
+// Simple backup scheduler: every 6 hours from last backup
+let lastBackupTimestamp = Date.now();
+const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function getNextBackupTime(): string {
+  const next = lastBackupTimestamp + BACKUP_INTERVAL_MS;
+  const diff = Math.max(0, next - Date.now());
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  if (hours > 0) return `In ${hours}h ${minutes}m`;
+  if (minutes > 0) return `In ${minutes}m`;
+  return 'Soon';
+}
+
+// Record daily risk score snapshot
+function recordRiskScoreSnapshot(score: number) {
+  const today = new Date().toISOString().split('T')[0];
+  const existing = riskScoreHistory.findIndex(r => r.date === today);
+  if (existing >= 0) {
+    riskScoreHistory[existing].score = score;
+  } else {
+    riskScoreHistory.push({ date: today, score });
+    if (riskScoreHistory.length > MAX_RISK_HISTORY) riskScoreHistory.shift();
+  }
+}
+
+function pushLatencySample(cppMetrics: any) {
   const now = new Date().toISOString();
-  const baseLatency = Math.max(1, latencyMicros / 1000); // convert to ms, minimum 1ms
-  const eventType = status === 'ONLINE' ? eventTypes[latencyHistory.length % eventTypes.length] : 'utility';
+  const eventType = cppMetrics.status === 'ONLINE' ? eventTypes[latencyHistory.length % eventTypes.length] : 'utility';
   latencyHistory.push({
     timestamp: now,
-    p50: Math.round(baseLatency * 10) / 10,
-    p95: Math.round(baseLatency * 2.5 * 10) / 10,
-    p99: Math.round(baseLatency * 4.5 * 10) / 10,
+    p50: Math.round((cppMetrics.p50LatencyMicroseconds || cppMetrics.averageLatencyMicroseconds || 0) / 100) / 10,
+    p95: Math.round((cppMetrics.p95LatencyMicroseconds || cppMetrics.averageLatencyMicroseconds || 0) / 100) / 10,
+    p99: Math.round((cppMetrics.p99LatencyMicroseconds || cppMetrics.averageLatencyMicroseconds || 0) / 100) / 10,
     eventType
   });
   if (latencyHistory.length > MAX_HISTORY) latencyHistory.shift();
@@ -2270,10 +2297,13 @@ app.get("/api/analytics/overview", requireAdminAuth, (req, res) => {
   
   const now = Date.now();
   const hours = ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00"];
-  const securityGraph = hours.map((h, i) => ({
+  // Historical graphs require persistent time-series storage.
+  // Return current snapshot values with a note instead of fabricated history.
+  const securityGraph = hours.map(h => ({
     time: h,
-    attacksBlocked: Math.round((stats.blockedAttacksCount || 0) * (0.1 + (i * 0.15))),
-    riskScore: Math.max(5, Math.min(100, Math.round((100 - stats.securityScore) + (i % 2 === 0 ? 5 : -5))))
+    attacksBlocked: stats.blockedAttacksCount || 0,
+    riskScore: stats.securityScore || 0,
+    note: 'Real historical data requires persistent time-series storage'
   }));
 
   const bannedIps = IPBanSystem.loadIPBans();
@@ -2287,13 +2317,13 @@ app.get("/api/analytics/overview", requireAdminAuth, (req, res) => {
     raidHistory: stats.blockedAttacksCount > 0 ? [
       { id: "raid_live", timestamp: new Date().toLocaleString(), type: "Mass Velocity Protection", attackerCount: stats.blockedAttacksCount, status: "Intercepted & Banned" }
     ] : [],
-    memberHeatmap: [
-      { hour: "00:00", joins: Math.round(memberCount * 0.01), leaves: 0, riskSpike: 0 },
-      { hour: "06:00", joins: Math.round(memberCount * 0.03), leaves: 0, riskSpike: 2 },
-      { hour: "12:00", joins: Math.round(memberCount * 0.08), leaves: 1, riskSpike: 5 },
-      { hour: "18:00", joins: Math.round(memberCount * 0.12), leaves: 2, riskSpike: 8 },
-      { hour: "22:00", joins: Math.round(memberCount * 0.04), leaves: 1, riskSpike: 3 }
-    ],
+    memberHeatmap: hours.map(h => ({
+      hour: h,
+      joins: 0,
+      leaves: 0,
+      riskSpike: 0,
+      note: 'Real hourly member activity tracking requires persistent event storage'
+    })),
     threatIntelFeed: bannedIps.slice(0, 10).map((b, idx) => ({
       id: `intel_${idx + 1}`,
       domainOrUser: `IP/User ${b.ipAddress}`,
@@ -2345,7 +2375,10 @@ app.get("/api/enterprise/cache-status", requireAdminAuth, (req, res) => {
 app.post("/api/enterprise/mongo-backup", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   try {
     logAdminAuditAction("PERFORM_CACHE_BACKUP", req);
+    const startTime = Date.now();
     const result = await MongoRedisEngine.performMongoBackup();
+    const durationMs = Date.now() - startTime;
+    const durationSec = Math.max(0, durationMs / 1000).toFixed(1);
     addBotLog(`[ENTERPRISE] Created Cache Backup at ${result.timestamp}`, "success");
     // Record backup in history for dashboard
     backupHistory.push({
@@ -2353,12 +2386,12 @@ app.post("/api/enterprise/mongo-backup", requireAdminAuth, heavyOpRateLimit, asy
       timestamp: result.timestamp,
       status: result.success ? 'success' : 'failed',
       size: `${result.backupSizeMB || 0} MB`,
-      duration: '0s',
+      duration: `${durationSec}s`,
       type: 'snapshot',
       verified: result.success
     });
     if (backupHistory.length > MAX_HISTORY) backupHistory.shift();
-    res.json(result);
+    res.json({ ...result, duration: `${durationSec}s` });
   } catch (err: any) {
     addBotLog(`[ENTERPRISE] Cache Backup failed: ${err.message}`, "error");
     res.status(500).json({ success: false, error: "Backup failed" });
@@ -2987,7 +3020,7 @@ Your Goal: Server protected + Members active + Owner's income increased.`,
 app.get("/api/analytics/latency", requireAdminAuth, (req, res) => {
   // Collect current telemetry sample before returning
   const cppMetrics = CppNativeEngine.getMetrics();
-  pushLatencySample(cppMetrics.averageLatencyMicroseconds || 0, cppMetrics.status || 'OFFLINE');
+  pushLatencySample(cppMetrics);
 
   const data = [...latencyHistory];
   const summary = data.length > 0 ? {
@@ -3048,7 +3081,7 @@ app.get("/api/analytics/backups", requireAdminAuth, (req, res) => {
   const data = [...backupHistory].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const summary = data.length > 0 ? {
     lastBackup: new Date(data[0].timestamp).toLocaleString(),
-    nextBackup: 'In 6 hours',
+    nextBackup: getNextBackupTime(),
     backupSize: data[0].size,
     backupDuration: data[0].duration,
     successCount: data.filter(b => b.status === 'success').length,
@@ -3056,7 +3089,7 @@ app.get("/api/analytics/backups", requireAdminAuth, (req, res) => {
     verifiedCount: data.filter(b => b.verified).length
   } : {
     lastBackup: 'Never',
-    nextBackup: 'In 6 hours',
+    nextBackup: getNextBackupTime(),
     backupSize: '0 MB',
     backupDuration: '0s',
     successCount: 0,
@@ -3070,7 +3103,11 @@ app.get("/api/analytics/backups", requireAdminAuth, (req, res) => {
 app.post("/api/analytics/backups", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   try {
     logAdminAuditAction("MANUAL_BACKUP_INITIATED", req);
+    const startTime = Date.now();
     const result = await MongoRedisEngine.performMongoBackup();
+    const durationMs = Date.now() - startTime;
+    const durationSec = Math.max(0, durationMs / 1000).toFixed(1);
+    lastBackupTimestamp = Date.now();
     addBotLog(`[ENTERPRISE] Manual Cache Backup at ${result.timestamp}`, "success");
     // Record backup in history for dashboard
     backupHistory.push({
@@ -3078,7 +3115,7 @@ app.post("/api/analytics/backups", requireAdminAuth, heavyOpRateLimit, async (re
       timestamp: result.timestamp,
       status: result.success ? 'success' : 'failed',
       size: `${result.backupSizeMB || 0} MB`,
-      duration: '0s',
+      duration: `${durationSec}s`,
       type: 'full',
       verified: result.success
     });
@@ -3144,11 +3181,16 @@ app.get("/api/analytics/risk-score", requireAdminAuth, (req, res) => {
 
   const overallScore = Math.round(categories.reduce((acc, cat) => acc + cat.score * cat.weight, 0));
 
-  // Generate 30-day historical scores (modeled from current score with deterministic drift)
-  const historicalScores = Array.from({ length: 30 }, (_, i) => {
-    const drift = Math.sin(i / 3) * 5;
-    return Math.min(100, Math.max(20, Math.round(overallScore + drift)));
-  });
+  // Store daily risk score snapshot for real historical tracking
+  recordRiskScoreSnapshot(overallScore);
+
+  // Use real stored history if available, otherwise indicate insufficient data
+  let historicalScores: number[] = [];
+  let historyNote = 'Insufficient historical data';
+  if (riskScoreHistory.length > 1) {
+    historicalScores = riskScoreHistory.map(r => r.score);
+    historyNote = `Real stored history (${riskScoreHistory.length} days)`;
+  }
 
   const factors = {
     criticalVulnerabilities: 0,
@@ -3165,7 +3207,26 @@ app.get("/api/analytics/risk-score", requireAdminAuth, (req, res) => {
     categories,
     factors,
     source: 'live-security-stats',
-    note: 'Scores derived from live bot configuration and operational state. No demo data.'
+    historyNote,
+    note: 'Scores derived from live bot configuration and operational state. Vulnerability counts are risk indicators, not scanner findings.'
+  });
+});
+
+// Trust System Demo Data Endpoint
+app.get("/api/analytics/trust-system", requireAdminAuth, (req, res) => {
+  const demoUsers = [
+    { username: 'admin_user', userId: 'user_10001', trustScore: 92, role: 'Admin', joinedAt: '2024-01-15T00:00:00Z', lastActive: new Date().toISOString() },
+    { username: 'moderator_1', userId: 'user_10002', trustScore: 87, role: 'Moderator', joinedAt: '2024-02-20T00:00:00Z', lastActive: new Date(Date.now() - 3600000).toISOString() },
+    { username: 'trusted_member', userId: 'user_10003', trustScore: 78, role: 'VIP', joinedAt: '2024-03-10T00:00:00Z', lastActive: new Date(Date.now() - 7200000).toISOString() },
+    { username: 'vip_user', userId: 'user_10004', trustScore: 71, role: 'VIP', joinedAt: '2024-04-05T00:00:00Z', lastActive: new Date(Date.now() - 86400000).toISOString() },
+    { username: 'helper_bot', userId: 'user_10005', trustScore: 65, role: 'Helper', joinedAt: '2024-05-12T00:00:00Z', lastActive: new Date(Date.now() - 172800000).toISOString() }
+  ];
+
+  res.json({
+    success: true,
+    users: demoUsers,
+    demo: true,
+    note: 'Trust system data is demonstration data. Real implementation requires Discord guild member activity integration.'
   });
 });
 

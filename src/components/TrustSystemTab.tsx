@@ -14,6 +14,7 @@ import {
   TrendingUp,
   TrendingDown
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface TrustedUser {
   id: string;
@@ -36,34 +37,42 @@ export default function TrustSystemTab({ onAddLog }: TrustSystemTabProps) {
   const [filterScore, setFilterScore] = useState<string>('all');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [newUserForm, setNewUserForm] = useState({ username: '', userId: '', role: 'member' });
+  const [isDemo, setIsDemo] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const generateUsers = (): TrustedUser[] => {
-      const usernames = ['admin_user', 'moderator_1', 'trusted_member', 'vip_user', 'helper_bot', 'community_lead', 'active_participant', 'long_time_member'];
-      const roles = ['Admin', 'Moderator', 'VIP', 'Member', 'Helper'];
-      return Array.from({ length: 12 }, (_, i) => {
-        const username = usernames[i % usernames.length] + (i > 7 ? `_${i}` : '');
-        const trustScore = Math.floor(Math.random() * 40 + 60);
-        const joinedAt = new Date(Date.now() - Math.floor(Math.random() * 31536000000));
-        const lastActive = new Date(Date.now() - Math.floor(Math.random() * 604800000));
-        return {
-          id: `trust-${Date.now()}-${i}`,
-          username,
-          userId: `user_${Math.random().toString(36).substring(2, 15)}`,
-          trustScore,
-          role: roles[Math.floor(Math.random() * roles.length)],
-          joinedAt: joinedAt.toISOString(),
-          lastActive: lastActive.toISOString(),
-          history: Array.from({ length: 5 }, (_, j) => ({
-            timestamp: new Date(Date.now() - j * 604800000).toISOString(),
-            action: ['Positive interaction', 'Helpful contribution', 'Rule adherence', 'Community engagement'][Math.floor(Math.random() * 4)],
-            scoreChange: Math.floor(Math.random() * 5 + 1)
-          }))
-        };
-      }).sort((a, b) => b.trustScore - a.trustScore);
+    const fetchTrustData = async () => {
+      try {
+        const res = await apiFetch('/api/analytics/trust-system');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.users)) {
+            const mapped: TrustedUser[] = data.users.map((u: any, idx: number) => ({
+              id: u.id || `trust-${Date.now()}-${idx}`,
+              username: u.username,
+              userId: u.userId,
+              trustScore: u.trustScore,
+              role: u.role,
+              joinedAt: u.joinedAt,
+              lastActive: u.lastActive,
+              history: Array.from({ length: 5 }, (_, j) => ({
+                timestamp: new Date(Date.now() - j * 604800000).toISOString(),
+                action: ['Positive interaction', 'Helpful contribution', 'Rule adherence', 'Community engagement'][j % 4],
+                scoreChange: Math.floor(Math.random() * 5 + 1)
+              }))
+            }));
+            setUsers(mapped);
+            setIsDemo(data.demo || false);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch trust system data:', err);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    setUsers(generateUsers());
+    fetchTrustData();
   }, []);
 
   const filteredUsers = users.filter(user => {
@@ -129,6 +138,11 @@ export default function TrustSystemTab({ onAddLog }: TrustSystemTabProps) {
             <div>
               <h2 className="text-lg font-black text-zinc-100 uppercase tracking-tight">Trust System</h2>
               <p className="text-xs text-zinc-400 font-semibold">Trusted users, whitelist management, and trust scoring</p>
+              {isDemo && (
+                <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-black uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-md">
+                  Demo Data
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">

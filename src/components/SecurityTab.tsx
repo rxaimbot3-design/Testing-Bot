@@ -332,7 +332,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
           </div>
 
           <div className="bg-[#121212]/10 backdrop-blur-md p-4 rounded-xl border border-white/20 text-center shrink-0 min-w-[220px] space-y-2">
-            <span className="text-[10px] font-mono text-indigo-200 uppercase tracking-widest block font-extrabold">SECURITY LEVEL RATING</span>
+            <span className="text-[10px] font-mono text-indigo-200 uppercase tracking-widest block font-extrabold">SECURITY CONFIGURATION SCORE</span>
             <div className="text-3xl font-black text-emerald-400 font-mono my-0.5">100 / 100</div>
             <button
               onClick={handleSimulate100Nukers}

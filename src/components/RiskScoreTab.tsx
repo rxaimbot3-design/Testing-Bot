@@ -32,6 +32,7 @@ export default function RiskScoreTab({ onAddLog }: RiskScoreTabProps) {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [factors, setFactors] = useState({ criticalVulnerabilities: 0, highRiskItems: 0, mediumRiskItems: 0, lowRiskItems: 0, lastAssessment: '' });
+  const [historyNote, setHistoryNote] = useState('');
 
   const fetchRiskScore = async () => {
     try {
@@ -44,6 +45,7 @@ export default function RiskScoreTab({ onAddLog }: RiskScoreTabProps) {
         setHistoricalScores(data.historicalScores || []);
         setRiskCategories(data.categories || []);
         if (data.factors) setFactors(data.factors);
+        if (data.historyNote) setHistoryNote(data.historyNote);
       }
     } catch (err: any) {
       setApiError(err.message || 'Failed to fetch risk score data');
@@ -149,24 +151,32 @@ export default function RiskScoreTab({ onAddLog }: RiskScoreTabProps) {
               <BarChart3 className="w-4 h-4 text-indigo-400" />
               Historical Trend (30 days)
             </h3>
-            <div className="h-48 flex items-end gap-1">
-              {historicalScores.map((score, idx) => (
-                <div
-                  key={idx}
-                  className="flex-1 bg-indigo-500/80 rounded-t hover:bg-indigo-400 transition-all cursor-pointer relative group"
-                  style={{ height: `${(score / 100) * 100}%`, minHeight: '4px' }}
-                  title={`Day ${idx + 1}: ${score}`}
-                >
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                    {score}
-                  </div>
+            {historicalScores.length > 1 ? (
+              <>
+                <div className="h-48 flex items-end gap-1">
+                  {historicalScores.map((score, idx) => (
+                    <div
+                      key={idx}
+                      className="flex-1 bg-indigo-500/80 rounded-t hover:bg-indigo-400 transition-all cursor-pointer relative group"
+                      style={{ height: `${(score / 100) * 100}%`, minHeight: '4px' }}
+                      title={`Day ${idx + 1}: ${score}`}
+                    >
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                        {score}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between mt-2 text-[10px] text-zinc-500 font-medium">
-              <span>30 days ago</span>
-              <span>Today</span>
-            </div>
+                <div className="flex items-center justify-between mt-2 text-[10px] text-zinc-500 font-medium">
+                  <span>30 days ago</span>
+                  <span>Today</span>
+                </div>
+              </>
+            ) : (
+              <div className="h-48 flex items-center justify-center">
+                <span className="text-xs text-zinc-500 font-bold">{historyNote || 'Insufficient historical data'}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -219,7 +229,7 @@ export default function RiskScoreTab({ onAddLog }: RiskScoreTabProps) {
           <div className="bg-[#18181b] rounded-xl border border-zinc-800/60 p-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-zinc-400">Critical Vulnerabilities</span>
+                <span className="text-xs font-bold text-zinc-400">Critical Risk Indicators</span>
                 <span className="text-xs font-black text-red-400">{factors.criticalVulnerabilities}</span>
               </div>
               <div className="flex items-center justify-between">
