@@ -121,7 +121,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
         { name: "Automatic Restart", status: "ACTIVE", desc: "Zero-downtime auto restart system recovering from network glitches." },
         { name: "Crash Recovery", status: "ACTIVE", desc: "State preservation system ensuring bot resumes without losing threat state." },
         { name: "Health Monitoring", status: "ONLINE", desc: "Continuous latency, memory usage, and gateway heartbeat ping checks." },
-        { name: "Database Replication", status: "ACTIVE", desc: "Multi-region redundant state database preserving whitelist configurations." },
+        { name: "State Persistence", status: "LOCAL", desc: "Whitelist and session state persisted to local encrypted storage." },
         { name: "Encrypted Backups", status: "ENCRYPTED", desc: "AES-256 encrypted server snapshot backups with secure key storage." }
       ]
     }
@@ -421,9 +421,9 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
                   Comprehensive end-to-end security stack protecting your Discord server across Prevention, Detection, Containment, Recovery, Monitoring, and Reliability.
                 </p>
               </div>
-              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 rounded-full text-xs font-mono font-black">
-                100/100 SECURE
-              </span>
+                 <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 rounded-full text-xs font-mono font-black">
+                  SECURE
+                </span>
             </div>
           </div>
 
@@ -567,7 +567,7 @@ export default function SecurityTab({ settings, onToggleSetting, onSimulateRaid,
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Backup & Recovery Pro</h3>
-                  <p className="text-xs text-zinc-500">Automated snapshots and instant disaster recovery (MongoDB/SQL)</p>
+                   <p className="text-xs text-zinc-500">Encrypted Discord server snapshots and state recovery</p>
                 </div>
               </div>
               <span className="bg-indigo-100 text-indigo-400 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">PREMIUM</span>

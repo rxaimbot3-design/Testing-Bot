@@ -147,7 +147,20 @@ export default function initPlugin(bot) {
     if (cmd === 'help') {
       setDevLogs(prev => [...prev, `Available commands: status, restart, reload, memory, clear`]);
     } else if (cmd === 'status') {
-      setDevLogs(prev => [...prev, `Cluster Nodes: 2 | Total Shards: 4 | Latency: 18ms | Status: Operational`]);
+      setDevLogs(prev => [...prev, `Fetching live status from backend...`]);
+      apiFetch('/api/enterprise/status')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data) {
+            const gw = data.gateways?.[0] || {};
+            setDevLogs(prev => [...prev, `Instance: ${data.deploymentType || 'single-instance'} | Gateways: ${data.gatewayCount || 1} | Ping: ${gw.ping ?? 0}ms | Status: ${gw.status || 'unknown'}`]);
+          } else {
+            setDevLogs(prev => [...prev, `Status unavailable`]);
+          }
+        })
+        .catch(() => {
+          setDevLogs(prev => [...prev, `Status fetch failed`]);
+        });
     } else if (cmd === 'memory') {
       setDevLogs(prev => [...prev, `Heap Used: 184MB / 512MB | External: 12MB | RSS: 240MB`]);
     } else if (cmd === 'clear') {
@@ -199,9 +212,9 @@ export default function initPlugin(bot) {
               <span className="text-xs text-zinc-400 font-medium">Hot Reload Modules Enabled</span>
             </div>
             <h2 className="text-lg font-black tracking-tight">Plugin Marketplace & Modular Extension Architecture</h2>
-            <p className="text-xs text-zinc-300 max-w-2xl leading-relaxed mt-1">
-              Extend your Discord bot with zero-downtime hot-swappable plugins. Install community extensions or load your custom modules built with the Plugin SDK.
-            </p>
+              <p className="text-xs text-zinc-300 max-w-2xl leading-relaxed mt-1">
+               Extend your Discord bot with modular extensions. Install community extensions or load custom modules built with the Plugin SDK. Requires bot restart to load new modules.
+              </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

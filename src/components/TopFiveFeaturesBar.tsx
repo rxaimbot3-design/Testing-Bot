@@ -293,7 +293,7 @@ export default function TopFiveFeaturesBar() {
               onClick={handleHotRestart}
               className="w-full bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-[10px] font-bold py-1.5 rounded-lg transition-all"
             >
-              🔄 Zero-Downtime Hot Reload
+               🔄 HTTP-Preserving Gateway Restart
             </button>
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-800/60 text-[10px] text-zinc-400 flex items-center justify-between">

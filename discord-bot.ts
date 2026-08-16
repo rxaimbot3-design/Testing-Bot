@@ -477,7 +477,7 @@ export function getSecurityStats(): SecurityStats {
     blockedAttacksCount,
     real100NukerDefenseActive: true,
     panicLockdownActive,
-    verifiedRoleChannelAuditStatus: "100/100 Enforced & Audited",
+    verifiedRoleChannelAuditStatus: "All Channel Overwrites Enforced & Audited",
     verifiedRoleName,
     lockedVCsCount,
     unlockedVCsCount,
@@ -1567,7 +1567,7 @@ export async function startDiscordBot() {
   }
 
   isStartingBot = true;
-  addBotLog("Starting Discord bot connection with 100/100 Zero Trust Anti-Nuke Shield...", "info");
+  addBotLog("Starting Discord bot connection with Zero Trust Anti-Nuke Shield...", "info");
   botStatus = "connecting";
 
   try {
@@ -1650,7 +1650,7 @@ function startPresenceRotator(client: Client) {
     const memberCount = client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
     const activities = [
       { name: `🛡️ ${guildCount} Servers | /help`, type: ActivityType.Watching },
-      { name: `⚡ 100/100 Zero Trust Anti-Nuke`, type: ActivityType.Playing },
+      { name: `⚡ Zero Trust Anti-Nuke`, type: ActivityType.Playing },
       { name: `👥 Guarding ${memberCount} Members`, type: ActivityType.Watching },
       { name: `🧠 ASHTRON Enterprise AI`, type: ActivityType.Listening }
     ];
@@ -1889,7 +1889,7 @@ client.on("clientReady", async () => {
           })
         );
         console.log("[BOT-READY] Guild fetch complete, count:", botGuilds.length);
-        addBotLog(`Guarding ${botGuilds.length} server(s) with 100/100 Zero Trust Security.`, "info");
+        addBotLog(`Guarding ${botGuilds.length} server(s) with Zero Trust Security.`, "info");
       } catch (gErr: any) {
         addBotLog(`Failed to load server lists: ${gErr.message}`, "warning");
       }
@@ -2100,7 +2100,7 @@ client.on("clientReady", async () => {
           },
           {
             name: "security-status",
-            description: "🛡️ Check real-time 100/100 Zero Trust Anti-Nuke status",
+             description: "🛡️ Check real-time Zero Trust Anti-Nuke status",
             default_member_permissions: "8"
           },
           {
@@ -2427,14 +2427,14 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           await sendLiveAuditAlert(message.guild, {
             title: "🛡️ ALL 6 ZERO TRUST DEFENSE LAYERS ACTIVE & ENFORCED",
             description: `**Triggered By:** <@${message.author.id}> (${message.author.tag})\n` +
-                         `**Security Score:** 🟢 100/100 MAXIMUM SHIELD\n` +
+                          `**Security Score:** 🟢 MAXIMUM SHIELD\n` +
                          `**Audit Channel:** <#${message.guild.channels.cache.find(c => c.name === "security-logs")?.id || ""}>\n` +
                          `**6 Defense Layers:** All Armed & Operational`,
             color: 0x10B981
           });
 
           const embed = new EmbedBuilder()
-            .setTitle("🛡️ ASHTRON 6-LAYER ZERO TRUST SECURITY SHIELD (100/100)")
+             .setTitle("🛡️ ASHTRON 6-LAYER ZERO TRUST SECURITY SHIELD")
             .setColor(0x10B981)
             .setDescription(
               `⚡ **1-COMMAND DEPLOYMENT EXECUTED PERFECTLY IN \`${message.guild.name}\`**\n\n` +
@@ -2458,7 +2458,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
               `• 🙈 Hidden Staff Channels: \`${auditRes.hiddenChannels}\` Channels\n\n` +
               `✅ **Status:** All 6 Layers Active • Total Attacks Blocked: \`${stats.blockedAttacksCount}\``
             )
-            .setFooter({ text: "ASHTRON 100/100 Zero Trust Security Suite" })
+             .setFooter({ text: "ASHTRON Zero Trust Security Suite" })
             .setTimestamp();
 
           await message.reply({ embeds: [embed] }).catch(() => {});
@@ -3355,7 +3355,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                 "🛡️ **SECURITY & MANAGEMENT:**\n" +
                 "• `/analyze` — Full AI security scan\n" +
                 "• `/dashboard` — Web control panel link\n" +
-                "• `/deploy-defense` — Activate 100/100 Zero Trust Anti-Nuke\n" +
+                "• `/deploy-defense` — Activate Zero Trust Anti-Nuke\n" +
                 "• `/setup-verify` — Deploy verification system\n" +
                 "• `/setup-invite-tracker` — Deploy invite logger\n" +
                 "• `/invites` / `/invite-leaderboard` — Invite statistics\n" +
@@ -3673,9 +3673,9 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           
           // 3. Dispatch Live Audit Feed Banner to #security-logs Channel
           await sendLiveAuditAlert(guild, {
-            title: "🛡️ 100/100 ALL 6 ZERO TRUST DEFENSE LAYERS ARMED & ACTIVE",
+             title: "🛡️ ALL 6 ZERO TRUST DEFENSE LAYERS ARMED & ACTIVE",
             description: `**Deployment Initiator:** <@${interaction.user.id}> (${interaction.user.tag})\n` +
-                         `**Security Rating:** 🟢 100/100 MAXIMUM SHIELD\n` +
+                          `**Security Rating:** 🟢 MAXIMUM SHIELD\n` +
                          `**Sub-17ms Multi-Thread Protection:** Active for Kicks/Bans/Deletes/Webhooks\n` +
                          `**Verified Role Matrix Enforced:**\n` +
                          `• Locked VCs Preserved: \`${auditRes.lockedVCs}\` Voice Channels\n` +
@@ -3686,7 +3686,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
 
           await safeReply(interaction, {
             embeds: [{
-              title: "🛡️ ASHTRON 6-LAYER ZERO TRUST DEFENSE SYSTEM ACTIVATED (100/100)",
+               title: "🛡️ ASHTRON 6-LAYER ZERO TRUST DEFENSE SYSTEM ACTIVATED",
               color: 0x10B981,
               description:
                 `⚡ **ALL 6 SECURITY DEFENSE LAYERS DEPLOYED IN 1 COMMAND FOR \`${guild.name}\`**\n\n` +
@@ -3708,7 +3708,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                 `• 🔒 Locked VCs Preserved: \`${auditRes.lockedVCs}\` Voice Channels\n` +
                 `• 🔓 Public Unlocked Channels: \`${auditRes.unlockedChannels}\` Channels\n` +
                 `• 🙈 Hidden Staff Channels: \`${auditRes.hiddenChannels}\` Channels\n\n` +
-                `✅ **Status:** 100/100 Maximum Security Shield Active • All 6 Layers Armed`,
+                `✅ **Status:** Maximum Security Shield Active • All 6 Layers Armed`,
               footer: { text: "ASHTRON Zero Trust Security Engine" },
               timestamp: new Date().toISOString()
             }]
@@ -3727,7 +3727,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
         }
         const stats = getSecurityStats();
         await interaction.reply({
-          content: `🛡️ **ULTIMATE ZERO TRUST SECURITY STATUS (100/100)**\n\n` +
+           content: `🛡️ **ULTIMATE ZERO TRUST SECURITY STATUS**\n\n` +
                    `• **Security Score:** \`${stats.securityScore}/100\` (MAXIMUM)\n` +
                    `• **Zero Trust Owner-Only:** \`ACTIVE\` (No Admin Exemption)\n` +
                    `• **Anti-100 Nuker Burst Defense:** \`ACTIVE\`\n` +
@@ -3748,9 +3748,9 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
         await interaction.reply({
           content: `⚡ **Bot Operational Health & Cluster Status:**\n` +
                    `• **Gateway Ping:** ${ping}ms\n` +
-                   `• **Sharding Engine:** Auto-Sharded (Shard 0/0)\n` +
+                    `• **Deployment:** Single-Instance Gateway (Shard 0)\n` +
                    `• **AI Core:** Gemini 3.6 Flash Active\n` +
-                   `• **Zero-Trust Shield:** 100/100 Enforcement Ready`
+                    `• **Zero-Trust Shield:** Enforcement Ready`
         });
         return;
       }
@@ -4423,7 +4423,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
           } catch (geminiErr: any) {
             const errStr = String(geminiErr?.message || geminiErr).toLowerCase();
             if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-              reply = `Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust 100/100 Anti-Nuke shield fully active ase! 👍`;
+               reply = `Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust Anti-Nuke shield fully active ase! 👍`;
             } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
               reply = `AI service temporary unavailable. Try again later.`;
             } else {
@@ -4436,7 +4436,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
         } catch (aiErr: any) {
           const errStr = String(aiErr?.message || aiErr).toLowerCase();
           if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-            await interaction.editReply(`Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust 100/100 Anti-Nuke shield fully active ase! 👍`);
+            await interaction.editReply(`Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust Anti-Nuke shield fully active ase! 👍`);
           } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
             await interaction.editReply(`AI service temporary unavailable. Try again later.`);
           } else {
@@ -4725,7 +4725,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
           if (targetId && recentProcessedKicks.has(targetId)) return;
           if (targetId) markKickProcessed(targetId);
 
-          addBotLog("🚨 [WEBSOCKET REAL-TIME] Unauthorized Kick detected! Rogue Admin: " + executorTag + " (" + (executorId || "Unknown") + "), Victim Target ID: " + targetId, "error");
+          addBotLog("🚨 [GATEWAY REAL-TIME] Unauthorized Kick detected! Rogue Admin: " + executorTag + " (" + (executorId || "Unknown") + "), Victim Target ID: " + targetId, "error");
           if (executorId) {
             checkNukerAttackThreshold(executorId, targetGuild.id, "MemberKick");
           }
@@ -4834,7 +4834,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
             return;
           }
 
-          addBotLog("🚨 [WEBSOCKET REAL-TIME] Unauthorized Ban detected! Rogue Admin: " + executorTag + " (" + (executorId || "Unknown") + "), Victim Target ID: " + targetId, "error");
+          addBotLog("🚨 [GATEWAY REAL-TIME] Unauthorized Ban detected! Rogue Admin: " + executorTag + " (" + (executorId || "Unknown") + "), Victim Target ID: " + targetId, "error");
           if (executorId) {
             checkNukerAttackThreshold(executorId, targetGuild.id, "MemberBanAdd");
           }
@@ -4879,7 +4879,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
                 const hasDangerous = dangerousPerms.some((p: any) => role.permissions.has(p));
                 
                 if (hasDangerous) {
-                  addBotLog("🚨 [WEBSOCKET REAL-TIME] Unauthorized Role Update detected! Rogue Admin: " + executorTag + " (" + executorId + ")", "error");
+                  addBotLog("🚨 [GATEWAY REAL-TIME] Unauthorized Role Update detected! Rogue Admin: " + executorTag + " (" + executorId + ")", "error");
                   checkNukerAttackThreshold(executorId, targetGuild.id, "RoleUpdate");
                   
                   // Revert
@@ -4923,7 +4923,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
              }
 
              if (hasDangerous) {
-                 addBotLog("🚨 [WEBSOCKET REAL-TIME] Unauthorized Role Assignment detected! Rogue Admin: " + executorTag + " (" + executorId + ") to User: " + targetId, "error");
+                 addBotLog("🚨 [GATEWAY REAL-TIME] Unauthorized Role Assignment detected! Rogue Admin: " + executorTag + " (" + executorId + ") to User: " + targetId, "error");
                  checkNukerAttackThreshold(executorId, targetGuild.id, "MemberRoleUpdate");
 
                  const targetMember = await targetGuild.members.fetch(targetId as string).catch(() => null);
@@ -4976,7 +4976,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
           if (isOwnerOrWhitelisted(executorId, targetGuild)) return;
 
           const botId = entry.targetId;
-          addBotLog("🚨 [WEBSOCKET REAL-TIME] Unauthorized Bot Addition detected! Rogue Admin: " + executorTag + " (" + executorId + ") added bot " + botId, "error");
+          addBotLog("🚨 [GATEWAY REAL-TIME] Unauthorized Bot Addition detected! Rogue Admin: " + executorTag + " (" + executorId + ") added bot " + botId, "error");
           checkNukerAttackThreshold(executorId, targetGuild.id, "BotAdd");
 
           if (botId) {
@@ -5016,7 +5016,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
           const executorTag = executor ? (executor.tag || executor.username) : executorId;
           if (isOwnerOrWhitelisted(executorId, targetGuild)) return;
 
-          addBotLog("🚨 [WEBSOCKET REAL-TIME] Unauthorized Server Settings Change detected! Rogue Admin: " + executorTag + " (" + executorId + ")", "error");
+          addBotLog("🚨 [GATEWAY REAL-TIME] Unauthorized Server Settings Change detected! Rogue Admin: " + executorTag + " (" + executorId + ")", "error");
           checkNukerAttackThreshold(executorId, targetGuild.id, "GuildUpdate");
 
           const nameChange = entry.changes?.find((c: any) => c.key === "name");
@@ -5448,7 +5448,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
           checkNukerAttackThreshold(executorId, guild.id, "MemberBanAdd");
 
           // Unban victim
-          await guild.bans.remove(ban.user, "Zero Trust 100/100 Instant Anti-Nuke Ban Revert").catch(() => {});
+          await guild.bans.remove(ban.user, "Zero Trust Instant Anti-Nuke Ban Revert").catch(() => {});
 
           await punishRogueAdmin(guild, executorId, "Member Ban", `Victim: ${ban.user.tag} (Unbanned)`);
 

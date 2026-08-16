@@ -2236,8 +2236,8 @@ app.get("/api/analytics/overview", requireAdminAuth, (req, res) => {
   res.json({
     securityGraph,
     modPerformance: [
-      { name: client?.user?.tag || "ASHTRON-AI (Bot)", actionsCount: stats.blockedAttacksCount || 0, avgResponseMs: client?.ws?.ping || 12, rating: "100/100" },
-      { name: "System Zero-Trust Guardian", actionsCount: bannedIps.length, avgResponseMs: Math.round(cppMetrics.averageLatencyMicroseconds / 1000) || 1, rating: "99/100" }
+      { name: client?.user?.tag || "ASHTRON-AI (Bot)", actionsCount: stats.blockedAttacksCount || 0, avgResponseMs: client?.ws?.ping || 12, rating: "Operational" },
+      { name: "System Zero-Trust Guardian", actionsCount: bannedIps.length, avgResponseMs: Math.round(cppMetrics.averageLatencyMicroseconds / 1000) || 1, rating: "Operational" }
     ],
     raidHistory: stats.blockedAttacksCount > 0 ? [
       { id: "raid_live", timestamp: new Date().toLocaleString(), type: "Mass Velocity Protection", attackerCount: stats.blockedAttacksCount, status: "Intercepted & Banned" }

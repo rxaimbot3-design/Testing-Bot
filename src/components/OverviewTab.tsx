@@ -208,10 +208,10 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
             <div>
               <div className="flex justify-between text-xs font-bold text-zinc-400 mb-1">
                 <span>API Connection State</span>
-                <span className="text-zinc-100">99.98% uptime</span>
+                <span className="text-zinc-100">Uptime monitoring</span>
               </div>
               <div className="w-full bg-[#27272a] h-2 rounded-full overflow-hidden">
-                <div className="bg-indigo-500 h-full w-[99.98%] rounded-full"></div>
+                <div className="bg-indigo-500 h-full w-full rounded-full"></div>
               </div>
             </div>
           </div>
@@ -219,7 +219,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           <div className="pt-4 border-t border-zinc-100">
             <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">⚡ Active Security & GOD AI Modules</h4>
             <div className="flex flex-wrap gap-1.5">
-              {['GOD AI Brain', '100/100 Anti-Nuke', 'RAID_DREAM', 'CODE_DOCTOR', 'VC_GOD', 'SALES_CLOSER', 'VIRAL_CONTENT', 'AI_JUDGE'].map((mod, idx) => (
+               {['GOD AI Brain', 'Anti-Nuke Shield', 'RAID_DREAM', 'CODE_DOCTOR', 'VC_GOD', 'SALES_CLOSER', 'VIRAL_CONTENT', 'AI_JUDGE'].map((mod, idx) => (
                 <span key={idx} className="text-[10px] font-black bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded-md border border-indigo-500/30">
                   👑 {mod}
                 </span>

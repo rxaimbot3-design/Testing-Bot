@@ -648,7 +648,7 @@ Get analytics overview (requires auth).
     { "time": "04:00", "attacksBlocked": 3, "riskScore": 8 }
   ],
   "modPerformance": [
-    { "name": "ASHTRON-AI (Bot)", "actionsCount": 42, "avgResponseMs": 12, "rating": "100/100" }
+    { "name": "ASHTRON-AI (Bot)", "actionsCount": 42, "avgResponseMs": 12, "rating": "Operational" }
   ],
   "raidHistory": [
     { "id": "raid_live", "timestamp": "...", "type": "Mass Velocity Protection", "attackerCount": 42, "status": "Intercepted & Banned" }
