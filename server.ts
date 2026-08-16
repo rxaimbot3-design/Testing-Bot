@@ -1391,8 +1391,8 @@ app.post("/api/enterprise/hot-reload", requireAdminAuth, heavyOpRateLimit, (req,
   }
 });
 
-// GraphQL API Dynamic Resolver Endpoint
-app.post("/api/graphql", requireAdminAuth, (req, res) => {
+// Query Gateway Endpoint
+app.post("/api/query-gateway", requireAdminAuth, (req, res) => {
   try {
     const { query, variables } = req.body || {};
     const client = getClient();
@@ -1400,7 +1400,7 @@ app.post("/api/graphql", requireAdminAuth, (req, res) => {
     const lowerQuery = queryStr.toLowerCase();
     const data: Record<string, any> = {};
 
-    // Standard GraphQL field extraction
+    // Standard field extraction based on query keywords
     if (lowerQuery.includes("guild") || lowerQuery.includes("server")) {
       data.guilds = client ? client.guilds.cache.map(g => ({
         id: g.id,
@@ -1432,7 +1432,7 @@ app.post("/api/graphql", requireAdminAuth, (req, res) => {
       data.logs = getDiscordBotStatus().logs.slice(-50);
     }
 
-    if (lowerQuery.includes("cpp") || lowerQuery.includes("wasm") || lowerQuery.includes("engine")) {
+    if (lowerQuery.includes("cpp") || lowerQuery.includes("engine")) {
       data.cppEngine = CppNativeEngine.getMetrics();
     }
 
@@ -1580,7 +1580,7 @@ app.post("/api/cpp-engine/scan", requireAdminAuth, (req, res) => {
   const result = CppNativeEngine.scanSecurityPacket(packetId, riskWeight);
   res.json({
     success: true,
-    engine: "C++ WASM Native Memory Core",
+    engine: "C++ Native Security Engine",
     result
   });
 });

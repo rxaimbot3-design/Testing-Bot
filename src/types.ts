@@ -101,7 +101,7 @@ export interface ApiKey {
   name: string;
   prefix: string;
   created: string;
-  type: 'REST' | 'WebSocket' | 'GraphQL';
+  type: 'REST' | 'WebSocket' | 'Query';
 }
 
 export interface BotStatusInfo {

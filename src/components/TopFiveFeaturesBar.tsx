@@ -142,7 +142,7 @@ export default function TopFiveFeaturesBar() {
           <h3 className="text-sm font-black text-white tracking-wide uppercase flex items-center gap-2">
             Top 5 Flagship Security Engine Highlights
             <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full normal-case font-bold flex items-center gap-1">
-              ⚡ C++ WASM Core Active (0.04ms Latency)
+               ⚡ C++ Native Engine Active
             </span>
           </h3>
         </div>

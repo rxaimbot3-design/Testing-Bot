@@ -551,14 +551,13 @@ Get cluster and shard status (requires auth).
 **Response:**
 ```json
 {
-  "highAvailability": true,
-  "clusterCount": 1,
-  "totalShards": 1,
-  "shards": [
+  "deploymentType": "single-instance",
+  "instanceCount": 1,
+  "gatewayCount": 1,
+  "gateways": [
     {
-      "clusterId": "Cluster-01",
-      "shardId": 0,
-      "status": "healthy",
+      "gatewayId": "gateway-01",
+      "status": "connected",
       "guildCount": 10,
       "ping": 18,
       "memoryUsageMB": 256,
@@ -568,20 +567,20 @@ Get cluster and shard status (requires auth).
   ],
   "zeroDowntimeRestartAvailable": true,
   "hotReloadAvailable": true,
-  "cacheReplicationLagMs": 0,
+  "cacheReplicationLagMs": null,
   "lastBackupTime": "13:37:54"
 }
 ```
 
 ### POST /api/enterprise/zero-downtime-restart
-Execute zero-downtime restart (requires auth, heavy rate limited).
+Execute HTTP-preserving gateway restart (requires auth, heavy rate limited).
 
 **Response:**
 ```json
 {
   "success": true,
-  "message": "Zero-Downtime cluster restart executed in 200ms. Active HTTP sessions preserved.",
-  "reloadedModules": ["EnvScanner", "IPBanSystem", "CppNativeEngine", "DiscordBotClient"]
+  "message": "HTTP server remains online. Discord bot connection restart initiated in background.",
+  "note": "This preserves the dashboard/API while refreshing the Discord gateway connection."
 }
 ```
 
@@ -1004,25 +1003,25 @@ Download Minecraft server properties.
 
 ---
 
-## GraphQL Endpoint
+## Query Gateway Endpoint
 
-### POST /api/graphql
-Dynamic GraphQL-style resolver (requires auth).
+### POST /api/query-gateway
+Dynamic query gateway for flexible data retrieval (requires auth).
 
 **Request:**
 ```json
 {
-  "query": "{ bot { status version } securityStats { blockedAttacksCount } }",
+  "query": "bot status security",
   "variables": {}
 }
 ```
 
-**Supported Queries:**
+**Supported Query Keywords:**
 - `guild` / `server` - Guild information
 - `bot` / `status` - Bot status
 - `security` / `stats` - Security statistics
 - `log` - Recent logs
-- `cpp` / `wasm` / `engine` - C++ engine metrics
+- `cpp` / `engine` - C++ engine metrics
 - `ban` / `ip` - IP ban data
 
 ---

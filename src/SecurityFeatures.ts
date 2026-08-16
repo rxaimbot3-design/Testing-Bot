@@ -2434,7 +2434,7 @@ export class MongoRedisEngine {
     this.realCacheMap.delete(key);
   }
 
-  static async performMongoBackup() {
+  static async performCacheBackup() {
     const timestamp = new Date().toISOString();
     const backupDir = path.join(process.cwd(), "backups");
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
@@ -2454,7 +2454,7 @@ export class MongoRedisEngine {
     }, 3, 1000);
 
     const sizeMB = parseFloat((fs.statSync(dumpFile).size / (1024 * 1024)).toFixed(3));
-    console.log(`[MONGODB BACKUP] Exported database snapshot to ${dumpFile} (${sizeMB} MB)`);
+    console.log(`[CACHE BACKUP] Exported cache snapshot to ${dumpFile} (${sizeMB} MB)`);
     return { success: true, timestamp, backupSizeMB: Math.max(0.01, sizeMB), dumpFile };
   }
 

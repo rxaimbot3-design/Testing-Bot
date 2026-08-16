@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   ShieldCheck
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface AttackEvent {
   id: string;
@@ -29,32 +30,37 @@ export default function AttackTimelineTab({ onAddLog }: AttackTimelineTabProps) 
   const [selectedCluster, setSelectedCluster] = useState<string>('all');
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showClusters, setShowClusters] = useState(true);
+  const [instanceId, setInstanceId] = useState<string>('gateway-01');
 
-  const clusters = ['Cluster-01', 'Cluster-02', 'Cluster-03', 'Cluster-04'];
   const attackTypes = ['Raid', 'Spam', 'Phishing', 'Malware', 'DDoS', 'Brute Force', 'SQL Injection', 'XSS'];
 
   useEffect(() => {
-    const generateTimelineEvents = (): AttackEvent[] => {
-      const now = Date.now();
-      const count = 40;
-      return Array.from({ length: count }, (_, i) => {
-        const type = attackTypes[Math.floor(Math.random() * attackTypes.length)];
-        const severities: AttackEvent['severity'][] = ['low', 'medium', 'high', 'critical'];
-        const severity = severities[Math.floor(Math.random() * severities.length)];
-        const timestamp = new Date(now - Math.floor(Math.random() * 86400000));
-        return {
-          id: `attack-${Date.now()}-${i}`,
-          timestamp: timestamp.toISOString(),
-          type,
-          severity,
-          cluster: clusters[Math.floor(Math.random() * clusters.length)],
-          description: `${type} attack detected and neutralized`
-        };
-      }).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const fetchTimelineEvents = async () => {
+      try {
+        const res = await apiFetch('/api/admin/audit-logs?limit=100');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            const mapped: AttackEvent[] = data.map((entry: any, idx: number) => ({
+              id: entry.id || `attack-${Date.now()}-${idx}`,
+              timestamp: entry.timestamp || new Date().toISOString(),
+              type: entry.action || 'security_event',
+              severity: entry.severity || 'medium',
+              cluster: entry.source === 'Backend Audit' ? instanceId : (entry.source || instanceId),
+              description: entry.details || entry.action || 'Security event detected'
+            }));
+            setEvents(mapped);
+          }
+        }
+      } catch {
+        // Silent fail on background poll
+      }
     };
 
-    setEvents(generateTimelineEvents());
-  }, [timeRange]);
+    fetchTimelineEvents();
+    const interval = setInterval(fetchTimelineEvents, 10000);
+    return () => clearInterval(interval);
+  }, [timeRange, instanceId]);
 
   const severityColors: Record<string, string> = {
     low: 'bg-yellow-500',
@@ -154,7 +160,7 @@ export default function AttackTimelineTab({ onAddLog }: AttackTimelineTabProps) 
             <span className={`text-2xl font-black ${patternColor}`}>{patternStrength}</span>
           </div>
           <div className="bg-[#18181b] rounded-xl p-4 border border-zinc-800/60">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Active Clusters</span>
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Active Instances</span>
             <span className="text-2xl font-black text-zinc-100">{Object.keys(clusteredEvents).length}</span>
           </div>
           <div className="bg-[#18181b] rounded-xl p-4 border border-zinc-800/60">
@@ -166,7 +172,7 @@ export default function AttackTimelineTab({ onAddLog }: AttackTimelineTabProps) 
         </div>
 
         <div className="mb-4">
-          <label className="text-xs font-bold text-zinc-400 block mb-2">Filter by Cluster</label>
+          <label className="text-xs font-bold text-zinc-400 block mb-2">Filter by Instance</label>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedCluster('all')}
@@ -174,19 +180,16 @@ export default function AttackTimelineTab({ onAddLog }: AttackTimelineTabProps) 
                 selectedCluster === 'all' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'
               }`}
             >
-              All Clusters
+              All Instances
             </button>
-            {clusters.map(cluster => (
-              <button
-                key={cluster}
-                onClick={() => setSelectedCluster(cluster)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                  selectedCluster === cluster ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                }`}
-              >
-                {cluster}
-              </button>
-            ))}
+            <button
+              onClick={() => setSelectedCluster(instanceId)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                selectedCluster === instanceId ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+              }`}
+            >
+              {instanceId}
+            </button>
           </div>
         </div>
 

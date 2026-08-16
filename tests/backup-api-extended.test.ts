@@ -109,8 +109,8 @@ describe("Backup API: Extended Coverage", () => {
     expect(res.status).toBe(401);
   });
 
-  it("requires auth for GraphQL", async () => {
-    const res = await request(app).post("/api/graphql").send({ query: "{}" });
+  it("requires auth for Query Gateway", async () => {
+    const res = await request(app).post("/api/query-gateway").send({ query: "{}" });
     expect(res.status).toBe(401);
   });
 

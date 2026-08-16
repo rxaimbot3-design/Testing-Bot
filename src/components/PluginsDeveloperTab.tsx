@@ -45,7 +45,7 @@ export default function PluginsDeveloperTab({ onAddLog }: PluginsDeveloperTabPro
     { id: 'ff2', key: 'GEMINI_SEARCH_GROUNDING', name: 'Google Search Live Grounding', enabled: true, isBeta: false, description: 'Allow Gemini AI slash commands to perform live Google searches for current information.' },
     { id: 'ff3', key: 'VOICE_CHANNEL_TRANSCRIPTION', name: 'AI Voice Channel Transcription (Beta)', enabled: false, isBeta: true, description: 'Transcribe live voice conversations into text channels using speech-to-text models.' },
     { id: 'ff4', key: 'ZERO_DOWNTIME_HOT_RELOAD', name: 'Zero Downtime Hot Code Reload', enabled: true, isBeta: false, description: 'Reload bot modules instantly without disrupting the Discord gateway connection.' },
-    { id: 'ff5', key: 'GRAPHQL_GATEWAY', name: 'GraphQL Query Gateway', enabled: true, isBeta: false, description: 'Expose GraphQL endpoint for external custom dashboard integrations.' }
+    { id: 'ff5', key: 'QUERY_GATEWAY', name: 'Query Gateway', enabled: true, isBeta: false, description: 'Expose query gateway endpoint for external custom dashboard integrations.' },
   ]);
 
   // API Keys
@@ -54,7 +54,7 @@ export default function PluginsDeveloperTab({ onAddLog }: PluginsDeveloperTabPro
     { id: 'k2', name: 'Realtime Telemetry Monitor', prefix: 'ent_evt_4b2c...', created: '2026-07-18', type: 'REST' }
   ]);
   const [newKeyName, setNewKeyName] = useState('');
-  const [newKeyType, setNewKeyType] = useState<'REST' | 'GraphQL'>('REST');
+  const [newKeyType, setNewKeyType] = useState<'REST' | 'Query'>('REST');
 
   // Custom Plugin Loader Code Sandbox
   const [customCode, setCustomCode] = useState(`// Custom Enterprise Plugin SDK Template
@@ -72,7 +72,7 @@ export default function initPlugin(bot) {
   const [devLogs, setDevLogs] = useState<string[]>([
     `[${new Date().toLocaleTimeString()}] [SDK Engine] Plugin Marketplace initialized. 5 modules indexed.`,
     `[${new Date().toLocaleTimeString()}] [REST API] Express route listener mounted on port 3000.`,
-    `[${new Date().toLocaleTimeString()}] [GraphQL] Schema compiled. Query listener ready.`
+    `[${new Date().toLocaleTimeString()}] [Query Gateway] Schema compiled. Query listener ready.`
   ]);
   const [consoleInput, setConsoleInput] = useState('');
 
@@ -178,7 +178,7 @@ export default function initPlugin(bot) {
         {[
           { id: 'marketplace', icon: Puzzle, label: 'Plugin Marketplace & SDK' },
           { id: 'sdk', icon: Code, label: 'Custom Plugin Loader' },
-                 { id: 'apis', icon: Globe, label: 'REST & GraphQL API' },
+                 { id: 'apis', icon: Globe, label: 'REST & Query Gateway API' },
           { id: 'flags', icon: ToggleLeft, label: 'Feature Flags & Beta' },
           { id: 'devconsole', icon: Terminal, label: 'Developer Console & Remote Config' }
         ].map(tab => {
@@ -319,19 +319,19 @@ export default function initPlugin(bot) {
             </div>
 
             <div className="space-y-3 text-xs text-zinc-400 leading-relaxed">
-              <p>
-                The Enterprise Bot Plugin SDK allows developers to hook into event emitters across all gateway shards safely in isolated V8 contexts.
-              </p>
+               <p>
+                 The Enterprise Bot Plugin SDK allows developers to hook into event emitters from the single gateway instance safely in isolated V8 contexts.
+               </p>
 
-              <div className="p-3 bg-[#18181b] rounded-xl border border-zinc-800 space-y-2">
-                <h4 className="font-extrabold text-zinc-100 text-xs">SDK Capabilities:</h4>
-                <ul className="list-disc pl-4 space-y-1 text-[11px] text-zinc-400">
-                  <li><strong>Event Hooks:</strong> Listen to messageCreate, guildMemberAdd, interactionCreate.</li>
-                  <li><strong>Cluster Aware:</strong> Access sharding metadata and bot ping metrics.</li>
-                  <li><strong>Gemini AI Bridge:</strong> Direct access to process text prompts via Gemini 3.6 Flash.</li>
-                  <li><strong>Storage API:</strong> Key-value store persistent across hot-reloads.</li>
-                </ul>
-              </div>
+               <div className="p-3 bg-[#18181b] rounded-xl border border-zinc-800 space-y-2">
+                 <h4 className="font-extrabold text-zinc-100 text-xs">SDK Capabilities:</h4>
+                 <ul className="list-disc pl-4 space-y-1 text-[11px] text-zinc-400">
+                   <li><strong>Event Hooks:</strong> Listen to messageCreate, guildMemberAdd, interactionCreate.</li>
+                   <li><strong>Instance Metrics:</strong> Access gateway ping and process metrics.</li>
+                   <li><strong>Gemini AI Bridge:</strong> Direct access to process text prompts via Gemini 3.6 Flash.</li>
+                   <li><strong>Storage API:</strong> Key-value store persistent across restarts.</li>
+                 </ul>
+               </div>
             </div>
           </div>
         </div>
@@ -368,11 +368,11 @@ export default function initPlugin(bot) {
             <div className="bg-[#121212] rounded-xl p-5 border border-zinc-800/80 space-y-3 shadow-xs">
               <div className="flex items-center gap-2 text-emerald-600">
                 <Layers className="w-5 h-5" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-zinc-100">GraphQL Gateway</h3>
+                 <h3 className="text-xs font-black uppercase tracking-wider text-zinc-100">Query Gateway</h3>
               </div>
               <p className="text-xs text-zinc-500">Flexible queries for deep relational metrics and log analytics.</p>
               <div className="p-2.5 bg-[#18181b] rounded-lg border border-zinc-800 font-mono text-[10px] text-emerald-400">
-                POST /api/graphql
+                 POST /api/query-gateway
               </div>
             </div>
           </div>
@@ -399,7 +399,7 @@ export default function initPlugin(bot) {
                   className="px-2 py-1.5 border border-zinc-800 bg-[#18181b] rounded-lg text-xs font-semibold focus:outline-none"
                 >
                   <option value="REST">REST</option>
-                  <option value="GraphQL">GraphQL</option>
+                  <option value="Query">Query Gateway</option>
                 </select>
                 <button
                   type="submit"
