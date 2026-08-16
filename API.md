@@ -532,7 +532,7 @@ Scan security packet (requires auth).
 ```json
 {
   "success": true,
-  "engine": "C++ WASM Native Memory Core",
+  "engine": "C++ Native Security Engine",
   "result": {
     "passed": true,
     "latencyMicros": 0.5,

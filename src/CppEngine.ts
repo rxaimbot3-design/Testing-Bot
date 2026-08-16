@@ -484,7 +484,7 @@ class SyncEngine {
     }
 
     this.metrics = {
-      engineName: "High-Performance ArrayBuffer Security Core (WASM-Ready Emulator)",
+      engineName: "High-Performance ArrayBuffer Security Fallback",
       architecture: `${os.arch()} Optimized Memory Engine`,
       status: "ACTIVE_MICROSECOND",
       memoryAllocatedBytes: this.memoryBuffer.byteLength,
