@@ -95,12 +95,40 @@ export default function BackupStatusTab({ onAddLog }: BackupStatusTabProps) {
     }
   };
 
-  const handleRestore = (backupId: string) => {
+  const handleRestore = async (backupId: string) => {
     onAddLog?.(`Restore initiated for backup ${backupId}`, 'high');
+    try {
+      const res = await apiFetch(`/api/analytics/backups/${backupId}/restore`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          onAddLog?.(`Backup ${backupId} restore completed successfully`, 'low');
+        } else {
+          onAddLog?.(`Backup ${backupId} restore failed: ${data.error}`, 'high');
+        }
+      }
+    } catch (err: any) {
+      onAddLog?.(`Backup ${backupId} restore error: ${err.message}`, 'high');
+    }
   };
 
-  const handleTestRestore = (backupId: string) => {
+  const handleTestRestore = async (backupId: string) => {
     onAddLog?.(`Restore test initiated for backup ${backupId}`, 'medium');
+    try {
+      const res = await apiFetch(`/api/analytics/backups/${backupId}/test-restore`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          onAddLog?.(`Backup ${backupId} test restore: ${data.message}`, 'low');
+          // Refresh backups to show updated verification state
+          fetchBackups();
+        } else {
+          onAddLog?.(`Backup ${backupId} test restore failed: ${data.error}`, 'high');
+        }
+      }
+    } catch (err: any) {
+      onAddLog?.(`Backup ${backupId} test restore error: ${err.message}`, 'high');
+    }
   };
 
   const successCount = summary.successCount;
