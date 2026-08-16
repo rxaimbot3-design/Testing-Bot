@@ -264,8 +264,9 @@ export default function DetectionLatencyTab({ onAddLog }: DetectionLatencyTabPro
                 </div>
             );
           })}
+            </div>
+          </div>
         </div>
-      </div>
       )}
     </div>
   );
