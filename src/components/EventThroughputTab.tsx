@@ -7,6 +7,7 @@ import {
   Clock,
   Target
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface EventThroughputTabProps {
   onAddLog?: (action: string, severity: 'low' | 'medium' | 'high' | 'critical') => void;
@@ -24,36 +25,35 @@ export default function EventThroughputTab({ onAddLog }: EventThroughputTabProps
   const [peakEps, setPeakEps] = useState(0);
   const [baselineEps] = useState(1500);
   const [selectedTimeRange, setSelectedTimeRange] = useState('1h');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const eventTypes = ['security', 'moderation', 'ai', 'voice', 'utility', 'integration'];
 
-  useEffect(() => {
-    const generateData = () => {
-      const now = Date.now();
-      const points = 60;
-      const data: ThroughputData[] = [];
-      
-      for (let i = points; i >= 0; i--) {
-        const timestamp = new Date(now - i * 60000);
-        const baseEps = 1200 + Math.sin(i / 5) * 300 + Math.random() * 200;
-        const byType: Record<string, number> = {};
-        eventTypes.forEach(type => {
-          byType[type] = Math.floor(baseEps * (0.1 + Math.random() * 0.15));
-        });
-        
-        data.push({
-          timestamp: timestamp.toISOString(),
-          eventsPerSecond: Math.floor(baseEps),
-          byType
-        });
+  const fetchThroughput = async () => {
+    try {
+      setError(null);
+      const res = await apiFetch('/api/analytics/throughput');
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setThroughputHistory(data.data);
+        if (data.summary) {
+          setCurrentEps(data.summary.currentEps);
+          setPeakEps(data.summary.peakEps);
+        }
       }
-      return data;
-    };
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch throughput data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const data = generateData();
-    setThroughputHistory(data);
-    setCurrentEps(data[data.length - 1]?.eventsPerSecond || 0);
-    setPeakEps(Math.max(...data.map(d => d.eventsPerSecond)));
+  useEffect(() => {
+    fetchThroughput();
+    const interval = setInterval(fetchThroughput, 5000);
+    return () => clearInterval(interval);
   }, [selectedTimeRange]);
 
   const typeTotals = eventTypes.reduce((acc, type) => {
@@ -65,7 +65,17 @@ export default function EventThroughputTab({ onAddLog }: EventThroughputTabProps
 
   return (
     <div className="space-y-6" id="event-throughput-tab">
-      <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-400 font-bold">
+          Failed to load throughput data: {error}
+        </div>
+      )}
+      {loading ? (
+        <div className="bg-[#121212] rounded-2xl p-12 border border-zinc-800/80 shadow-xs flex items-center justify-center">
+          <span className="text-xs text-zinc-400 font-bold">Loading throughput telemetry...</span>
+        </div>
+      ) : (
+        <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
@@ -204,6 +214,7 @@ export default function EventThroughputTab({ onAddLog }: EventThroughputTabProps
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   Info,
   BarChart3
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface RiskScoreTabProps {
   onAddLog?: (action: string, severity: 'low' | 'medium' | 'high' | 'critical') => void;
@@ -24,35 +25,38 @@ interface RiskCategory {
 }
 
 export default function RiskScoreTab({ onAddLog }: RiskScoreTabProps) {
-  const [overallScore, setOverallScore] = useState(72);
+  const [overallScore, setOverallScore] = useState(0);
   const [historicalScores, setHistoricalScores] = useState<number[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [riskCategories, setRiskCategories] = useState<RiskCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [factors, setFactors] = useState({ criticalVulnerabilities: 0, highRiskItems: 0, mediumRiskItems: 0, lowRiskItems: 0, lastAssessment: '' });
 
-  const riskCategories: RiskCategory[] = [
-    { name: 'Authentication', score: 85, weight: 0.25, trend: 'down', details: 'Strong MFA enforcement, session management secure' },
-    { name: 'Authorization', score: 68, weight: 0.2, trend: 'stable', details: 'Role-based access control needs refinement' },
-    { name: 'Network Security', score: 91, weight: 0.2, trend: 'up', details: 'WAF active, DDoS protection enabled' },
-    { name: 'Data Protection', score: 74, weight: 0.15, trend: 'down', details: 'Encryption at rest configured, gaps in transit' },
-    { name: 'Threat Detection', score: 88, weight: 0.1, trend: 'up', details: 'AI-powered detection with 99.2% accuracy' },
-    { name: 'Compliance', score: 62, weight: 0.1, trend: 'stable', details: 'GDPR compliant, SOC2 audit pending' }
-  ];
+  const fetchRiskScore = async () => {
+    try {
+      setApiError(null);
+      const res = await apiFetch('/api/analytics/risk-score');
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.success) {
+        setOverallScore(data.overallScore);
+        setHistoricalScores(data.historicalScores || []);
+        setRiskCategories(data.categories || []);
+        if (data.factors) setFactors(data.factors);
+      }
+    } catch (err: any) {
+      setApiError(err.message || 'Failed to fetch risk score data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const generateHistorical = () => {
-      const scores: number[] = [];
-      let current = 65;
-      for (let i = 0; i < 30; i++) {
-        current = Math.max(20, Math.min(95, current + (Math.random() - 0.5) * 10));
-        scores.push(Math.round(current));
-      }
-      return scores;
-    };
-    setHistoricalScores(generateHistorical());
+    fetchRiskScore();
+    const interval = setInterval(fetchRiskScore, 10000);
+    return () => clearInterval(interval);
   }, []);
-
-  const weightedScore = riskCategories.reduce((acc, cat) => acc + cat.score * cat.weight, 0);
-  const overall = Math.round(weightedScore);
-  useEffect(() => setOverallScore(overall), [overall]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-emerald-400';
@@ -81,7 +85,17 @@ export default function RiskScoreTab({ onAddLog }: RiskScoreTabProps) {
 
   return (
     <div className="space-y-6" id="risk-score-tab">
-      <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
+      {apiError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-400 font-bold">
+          Failed to load risk score data: {apiError}
+        </div>
+      )}
+      {loading ? (
+        <div className="bg-[#121212] rounded-2xl p-12 border border-zinc-800/80 shadow-xs flex items-center justify-center">
+          <span className="text-xs text-zinc-400 font-bold">Loading risk assessment...</span>
+        </div>
+      ) : (
+        <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-6">
@@ -206,28 +220,29 @@ export default function RiskScoreTab({ onAddLog }: RiskScoreTabProps) {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-400">Critical Vulnerabilities</span>
-                <span className="text-xs font-black text-red-400">0</span>
+                <span className="text-xs font-black text-red-400">{factors.criticalVulnerabilities}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-400">High Risk Items</span>
-                <span className="text-xs font-black text-orange-400">2</span>
+                <span className="text-xs font-black text-orange-400">{factors.highRiskItems}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-400">Medium Risk Items</span>
-                <span className="text-xs font-black text-amber-400">5</span>
+                <span className="text-xs font-black text-amber-400">{factors.mediumRiskItems}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-400">Low Risk Items</span>
-                <span className="text-xs font-black text-emerald-400">12</span>
+                <span className="text-xs font-black text-emerald-400">{factors.lowRiskItems}</span>
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                 <span className="text-xs font-bold text-zinc-300">Last Assessment</span>
-                <span className="text-xs font-black text-zinc-100">{new Date().toLocaleString()}</span>
+                <span className="text-xs font-black text-zinc-100">{factors.lastAssessment}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

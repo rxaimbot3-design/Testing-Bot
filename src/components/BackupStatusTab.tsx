@@ -11,6 +11,7 @@ import {
   Calendar,
   FileArchive
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface BackupEntry {
   id: string;
@@ -33,53 +34,65 @@ export default function BackupStatusTab({ onAddLog }: BackupStatusTabProps) {
   const [backupSize, setBackupSize] = useState('0 MB');
   const [backupDuration, setBackupDuration] = useState('0s');
   const [isRunning, setIsRunning] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [summary, setSummary] = useState({ successCount: 0, failedCount: 0, verifiedCount: 0 });
+
+  const fetchBackups = async () => {
+    try {
+      setApiError(null);
+      const res = await apiFetch('/api/analytics/backups');
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.success) {
+        setBackups(data.backups || []);
+        if (data.summary) {
+          setLastBackup(data.summary.lastBackup);
+          setNextBackup(data.summary.nextBackup);
+          setBackupSize(data.summary.backupSize);
+          setBackupDuration(data.summary.backupDuration);
+          setSummary({
+            successCount: data.summary.successCount,
+            failedCount: data.summary.failedCount,
+            verifiedCount: data.summary.verifiedCount
+          });
+        }
+      }
+    } catch (err: any) {
+      setApiError(err.message || 'Failed to fetch backup data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const generateBackups = (): BackupEntry[] => {
-      const now = Date.now();
-      return Array.from({ length: 15 }, (_, i) => {
-        const statuses: BackupEntry['status'][] = ['success', 'success', 'success', 'failed'];
-        const types: BackupEntry['type'][] = ['full', 'incremental', 'snapshot'];
-        return {
-          id: `backup-${Date.now()}-${i}`,
-          timestamp: new Date(now - i * 86400000).toISOString(),
-          status: statuses[Math.floor(Math.random() * statuses.length)],
-          size: `${(Math.random() * 500 + 50).toFixed(1)} MB`,
-          duration: `${Math.floor(Math.random() * 300 + 30)}s`,
-          type: types[Math.floor(Math.random() * types.length)],
-          verified: Math.random() > 0.2
-        };
-      }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    };
-
-    const backupData = generateBackups();
-    setBackups(backupData);
-    if (backupData.length > 0) {
-      setLastBackup(new Date(backupData[0].timestamp).toLocaleString());
-      setBackupSize(backupData[0].size);
-      setBackupDuration(backupData[0].duration);
-    }
+    fetchBackups();
+    const interval = setInterval(fetchBackups, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleRunBackup = async () => {
     setIsRunning(true);
     onAddLog?.('Manual backup initiated', 'medium');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    const newBackup: BackupEntry = {
-      id: `backup-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      status: 'success',
-      size: `${(Math.random() * 500 + 50).toFixed(1)} MB`,
-      duration: `${Math.floor(Math.random() * 300 + 30)}s`,
-      type: 'full',
-      verified: true
-    };
-    setBackups(prev => [newBackup, ...prev]);
-    setLastBackup(new Date().toLocaleString());
-    setBackupSize(newBackup.size);
-    setBackupDuration(newBackup.duration);
-    setIsRunning(false);
-    onAddLog?.('Backup completed successfully', 'low');
+    try {
+      const res = await apiFetch('/api/analytics/backups', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.success && data.backup) {
+        setBackups(prev => [data.backup, ...prev]);
+        setLastBackup(new Date(data.backup.timestamp).toLocaleString());
+        setBackupSize(data.backup.size);
+        setBackupDuration(data.backup.duration);
+        onAddLog?.('Backup completed successfully', 'low');
+      } else {
+        throw new Error(data.error || 'Backup failed');
+      }
+    } catch (err: any) {
+      setApiError(err.message || 'Backup failed');
+      onAddLog?.(`Backup failed: ${err.message}`, 'high');
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const handleRestore = (backupId: string) => {
@@ -90,13 +103,23 @@ export default function BackupStatusTab({ onAddLog }: BackupStatusTabProps) {
     onAddLog?.(`Restore test initiated for backup ${backupId}`, 'medium');
   };
 
-  const successCount = backups.filter(b => b.status === 'success').length;
-  const failedCount = backups.filter(b => b.status === 'failed').length;
-  const verifiedCount = backups.filter(b => b.verified).length;
+  const successCount = summary.successCount;
+  const failedCount = summary.failedCount;
+  const verifiedCount = summary.verifiedCount;
 
   return (
     <div className="space-y-6" id="backup-status-tab">
-      <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
+      {apiError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-400 font-bold">
+          Failed to load backup data: {apiError}
+        </div>
+      )}
+      {loading ? (
+        <div className="bg-[#121212] rounded-2xl p-12 border border-zinc-800/80 shadow-xs flex items-center justify-center">
+          <span className="text-xs text-zinc-400 font-bold">Loading backup status...</span>
+        </div>
+      ) : (
+        <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
@@ -274,7 +297,7 @@ export default function BackupStatusTab({ onAddLog }: BackupStatusTabProps) {
             ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

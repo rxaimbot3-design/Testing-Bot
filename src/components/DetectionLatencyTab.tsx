@@ -7,6 +7,7 @@ import {
   BarChart3,
   Zap
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
 
 interface DetectionLatencyTabProps {
   onAddLog?: (action: string, severity: 'low' | 'medium' | 'high' | 'critical') => void;
@@ -24,33 +25,34 @@ export default function DetectionLatencyTab({ onAddLog }: DetectionLatencyTabPro
   const [latencyData, setLatencyData] = useState<LatencyData[]>([]);
   const [selectedEventType, setSelectedEventType] = useState<string>('all');
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const eventTypes = ['security', 'moderation', 'ai', 'voice', 'utility', 'integration'];
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  useEffect(() => {
-    const generateData = () => {
-      const now = Date.now();
-      const points = 60;
-      const data: LatencyData[] = [];
-      
-      for (let i = points; i >= 0; i--) {
-        const timestamp = new Date(now - i * 60000);
-        const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-        const baseLatency = eventType === 'ai' ? 150 : eventType === 'voice' ? 80 : 30;
-        
-        data.push({
-          timestamp: timestamp.toISOString(),
-          p50: baseLatency + Math.random() * 20,
-          p95: baseLatency * 2 + Math.random() * 50,
-          p99: baseLatency * 4 + Math.random() * 100,
-          eventType
-        });
+  const fetchLatency = async () => {
+    try {
+      setError(null);
+      const res = await apiFetch('/api/analytics/latency');
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setLatencyData(data.data);
+      } else {
+        setLatencyData([]);
       }
-      return data;
-    };
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch latency data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    setLatencyData(generateData());
+  useEffect(() => {
+    fetchLatency();
+    const interval = setInterval(fetchLatency, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const filteredData = selectedEventType === 'all' 
@@ -75,7 +77,17 @@ export default function DetectionLatencyTab({ onAddLog }: DetectionLatencyTabPro
 
   return (
     <div className="space-y-6" id="detection-latency-tab">
-      <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-400 font-bold">
+          Failed to load latency data: {error}
+        </div>
+      )}
+      {loading ? (
+        <div className="bg-[#121212] rounded-2xl p-12 border border-zinc-800/80 shadow-xs flex items-center justify-center">
+          <span className="text-xs text-zinc-400 font-bold">Loading latency telemetry...</span>
+        </div>
+      ) : (
+        <div className="bg-[#121212] rounded-2xl p-6 border border-zinc-800/80 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600">
@@ -250,11 +262,11 @@ export default function DetectionLatencyTab({ onAddLog }: DetectionLatencyTabPro
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+            );
+          })}
         </div>
       </div>
+      )}
     </div>
   );
 }
