@@ -384,7 +384,6 @@ export default function DiscordConnectTab() {
                 Click <strong>"Start Bot"</strong> in the panel. Once online, add the bot to your server using the invite link and test the following slash commands in any channel:
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="px-2 py-1 bg-[#27272a] border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-md font-bold">/ask</span>
                 <span className="px-2 py-1 bg-[#27272a] border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-md font-bold">/translate</span>
                 <span className="px-2 py-1 bg-[#27272a] border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-md font-bold">/summarize</span>
                 <span className="px-2 py-1 bg-[#27272a] border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-md font-bold">/toxicity</span>
