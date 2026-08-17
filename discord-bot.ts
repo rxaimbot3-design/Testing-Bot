@@ -1932,18 +1932,6 @@ client.on("clientReady", async () => {
             description: "🔓 Verify your account to access server channels"
           },
           {
-            name: "ask",
-            description: "🤖 Ask anything to the Gemini AI GOD Brain",
-            options: [
-              {
-                name: "question",
-                type: 3,
-                description: "The question to ask Gemini AI",
-                required: true
-              }
-            ]
-          },
-          {
             name: "panic-lockdown",
             description: "🚨 Emergency lock down on all server channels instantly"
           },
@@ -2529,12 +2517,11 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
             `• \`!panic-lockdown\` / \`/panic-lockdown\` - Server-wide channel lockdown\n` +
             `• \`!analyze\` / \`/analyze\` - AI Security & Server Health Report\n` +
             `• \`!dashboard\` / \`/dashboard\` - Web Control Panel link\n` +
-            `• \`!setup-verify\` / \`/setup-verify\` - Create #verify channel & verification button\n` +
-            `• \`!setup-honeypot\` / \`/setup-honeypot\` - Generate decoy Honeypot Trap link (Auto-bans IP & Discord)\n` +
-             `• \`!setup-invite-tracker\` - Deploy real-time invite tracker\n` +
-            `• \`!invites\` / \`/invites\` - Check invite statistics\n` +
-            `• \`!ask <question>\` / \`/ask\` - Query the GOD AI Core Brain\n` +
-            `• \`!sync\` - Force re-sync Slash Commands (\`/\`) directly to this server`
+             `• \`!setup-verify\` / \`/setup-verify\` - Create #verify channel & verification button\n` +
+             `• \`!setup-honeypot\` / \`/setup-honeypot\` - Generate decoy Honeypot Trap link (Auto-bans IP & Discord)\n` +
+              `• \`!setup-invite-tracker\` - Deploy real-time invite tracker\n` +
+             `• \`!invites\` / \`/invites\` - Check invite statistics\n` +
+             `• \`!sync\` - Force re-sync Slash Commands (\`/\`) directly to this server`
           ).catch(() => {});
           return;
         }
@@ -2670,44 +2657,6 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
               ? `🚨 **EMERGENCY PANIC LOCKDOWN ACTIVATED!**\nAll channels locked. Sending permissions revoked server-wide.`
               : `🟢 **Emergency Panic Lockdown Deactivated.** Channel permissions restored to normal.`
           ).catch(() => {});
-          return;
-        }
-
-        if (pCmd === "ask" || pCmd === "ai") {
-          const question = parts.slice(1).join(" ");
-          if (!question) {
-            await message.reply("❓ Please provide a question, e.g. `!ask What is Zero Trust security?`").catch(() => {});
-            return;
-          }
-          let reply = "";
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            try {
-              const reqConfig: any = {
-                systemInstruction: "You are ASHTRON AI, the ultimate Discord security and server management bot. Be concise, helpful, and friendly.",
-              };
-              reqConfig.httpOptions = { fetchOptions: { signal: controller.signal } };
-              const response = await ai.models.generateContent({
-                model: "gemini-1.5-flash",
-                contents: question,
-                config: reqConfig
-              });
-              reply = response.text || "No response received from Gemini AI.";
-            } finally {
-              clearTimeout(timeoutId);
-            }
-          } catch (geminiErr: any) {
-            const errStr = String(geminiErr?.message || geminiErr).toLowerCase();
-            if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-              reply = "Quota limit reached for AI generation, but all ASHTRON security shields remain active!";
-            } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
-              reply = "AI service is temporarily unavailable. Please try again later.";
-            } else {
-              reply = "AI generation failed. Please try again later.";
-            }
-          }
-          await message.reply(`🤖 **ASHTRON AI:**\n${reply.slice(0, 1900)}`).catch(() => {});
           return;
         }
 
@@ -3361,8 +3310,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                 "• `/deploy-defense` — Activate Zero Trust Anti-Nuke\n" +
                 "• `/setup-verify` — Deploy verification system\n" +
                 "• `/setup-invite-tracker` — Deploy invite logger\n" +
-                "• `/invites` / `/invite-leaderboard` — Invite statistics\n" +
-                "• `/ask <question>` — Query Gemini AI Brain",
+                "• `/invites` / `/invite-leaderboard` — Invite statistics",
               color: 0x3B82F6
             }],
             ephemeral: true
@@ -4339,113 +4287,6 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           `• **Total Blocked Attacks (All-Time):** \`${res.blockedAttacksCount}\` Attacks\n` +
           `• **Security Score:** \`${res.securityScore}/100\` (MAXIMUM SHIELD INTACT)`
         );
-        return;
-      }
-
-      // Handle AI Ask Command
-      if (commandName === "ask") {
-        const textParam = interaction.options.getString("question") || "";
-        if (!textParam.trim()) {
-          await interaction.reply({ content: "Error: Please provide a valid text prompt.", ephemeral: true });
-          return;
-        }
-
-        await interaction.deferReply();
-        try {
-          const ai = getAi();
-          if (!ai) {
-            await interaction.editReply("❌ AI system is currently disabled. Configure `GEMINI_API_KEY` in environment settings.");
-            return;
-          }
-
-          const GOD_AI_SYSTEM_INSTRUCTION = `You are the GOD AI Brain of the "EXCLUSIVE" Discord Server.
-Identity: You are not just a bot. You are the CEO, Head Mod, Security, Salesman, and Content Manager of this server.
-
-PERSONALITY:
-- Speak in English. Keep it short. Max 2 lines.
-- Max 1 emoji. Be casual, use terms like "bro" or "ok". Do not be overly formal.
-- Provide direct actions and solutions. Do not lecture.
-- If you don't know, just say "Bro, I don't know about this."
-
-CORE RULES:
-1. Safety First: If you see swearing, scams, nukes, raids, or threats, delete and timeout/ban immediately. No warnings.
-2. Memory: Check the 7-day server memory before making a decision.
-3. Speed: Make decisions within 0.5s.
-
-YOUR 6 MODES:
-The input will start with [MODE: NAME]. Act accordingly.
-
-[MODE: RAID_DREAM]
-INPUT: 7 days log: {server_logs}
-TASK: State Raid risk % + Top 3 suspects + Reason + Action.
-OUTPUT JSON: {"risk":"85%","suspects":["@user1"],"reason":"...","action":"lock"}
-
-[MODE: CODE_DOCTOR]
-INPUT: Error: {error_message} Code: {code}
-TASK: State where the bug is + Fixed code + Reason in 1 line.
-
-[MODE: VC_GOD]
-INPUT: Transcript: "{text}" User: {userId}
-TASK: Check for swearing, scams, threats, or AI Voice.
-OUTPUT JSON: If problem: {"action":"mute","duration":"10m","reason":"swearing"} Else: {"action":"ok"}
-
-[MODE: SALES_CLOSER]
-INPUT: Customer: "{msg}" Product: $14.99/mo Anti-Nuke, AI Mod, VC
-TASK: Sell the product in English in 2 lines. Do not pressure.
-
-[MODE: VIRAL_CONTENT]
-INPUT: Topic: {server_topic}
-TASK: Provide 1 Poll + 1 Meme + 1 Event idea. Use today's trend. 3 lines of English.
-
-[MODE: AI_JUDGE]
-INPUT: Report: {report} Evidence: {messages}
-TASK: Who is guilty + Why + What is the punishment.
-OUTPUT JSON: {"guilty":"@user","reason":"...","punishment":"7d_timeout"}
-
-FINAL RULE:
-Your Goal: Server secured + Members active + Owner's income increased.`;
-
-          let reply = "";
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            try {
-              const reqConfig: any = {
-                systemInstruction: GOD_AI_SYSTEM_INSTRUCTION,
-              };
-              reqConfig.httpOptions = { fetchOptions: { signal: controller.signal } };
-              const response = await ai.models.generateContent({
-                model: "gemini-1.5-flash",
-                contents: textParam,
-                config: reqConfig
-              });
-              reply = response.text || "No response received from Gemini.";
-            } finally {
-              clearTimeout(timeoutId);
-            }
-          } catch (geminiErr: any) {
-            const errStr = String(geminiErr?.message || geminiErr).toLowerCase();
-            if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-               reply = `Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust Anti-Nuke shield fully active ase! 👍`;
-            } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
-              reply = `AI service temporary unavailable. Try again later.`;
-            } else {
-              reply = `AI generation failed. Please try again later.`;
-            }
-          }
-
-          const truncatedReply = reply.length > 1950 ? reply.slice(0, 1950) + "\n*(truncated due to length)*" : reply;
-          await interaction.editReply(`🤖 **Ultimate AI Core Reply**:\n\n${truncatedReply}`);
-        } catch (aiErr: any) {
-          const errStr = String(aiErr?.message || aiErr).toLowerCase();
-          if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
-            await interaction.editReply(`Bhai, amar AI quota limit sesh hoye gece! Tobe chinta nai, amar Zero Trust Anti-Nuke shield fully active ase! 👍`);
-          } else if (errStr.includes("timeout") || errStr.includes("aborted") || errStr.includes("network") || errStr.includes("unavailable")) {
-            await interaction.editReply(`AI service temporary unavailable. Try again later.`);
-          } else {
-            await interaction.editReply(`❌ AI generation error. Please try again later.`);
-          }
-        }
         return;
       }
 
