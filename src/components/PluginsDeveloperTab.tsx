@@ -22,6 +22,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { PluginItem, FeatureFlag, ApiKey } from '../types';
+import { apiFetch } from '../services/apiClient';
 
 interface PluginsDeveloperTabProps {
   onAddLog: (action: string, severity: 'low' | 'medium' | 'high') => void;

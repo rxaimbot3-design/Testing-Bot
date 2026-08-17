@@ -29,7 +29,8 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
     if (!guild) {
       if (guildId === "default_guild" && client.guilds.cache.size > 0) {
         guild = client.guilds.cache.first();
-      } else {
+      }
+      if (!guild) {
         console.warn(`Guild ${guildId} not found in client cache.`);
         logFunc(`❌ Cannot play music: Specified Guild ID '${guildId}' is invalid or unavailable.`, "error");
         return false;
@@ -59,7 +60,7 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
     }
 
     // Check if voice channel is full
-    if (targetChannel.members.size >= targetChannel.userLimit && targetChannel.userLimit > 0) {
+    if (targetChannel.isVoiceBased() && (targetChannel as any).members.size >= (targetChannel as any).userLimit && (targetChannel as any).userLimit > 0) {
       logFunc(`❌ Voice channel '${targetChannel.name}' is full in ${guild.name}.`, "error");
       return false;
     }
@@ -87,7 +88,12 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
         channelId: targetChannel.id,
         guildId: guild.id,
         adapterCreator: guild.voiceAdapterCreator,
-      });
+      }) as any;
+
+      if (!connection) {
+        logFunc(`❌ Failed to join voice channel in ${guild.name}.`, "error");
+        return false;
+      }
 
       connection.on(VoiceConnectionStatus.Disconnected, () => {
         logFunc(`🎵 Disconnected from Voice Channel '${targetChannel.name}' in ${guild.name}.`, "warning");
@@ -95,7 +101,7 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
         guildResources.delete(guild.id);
       });
 
-      connection.on('error', (error: any) => {
+      (connection as any).on('error', (error: any) => {
         logFunc(`❌ Voice Connection Error in ${guild.name}: ${error.message}`, "error");
         guildPlayers.delete(guild.id);
         guildResources.delete(guild.id);
@@ -103,7 +109,7 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
 
       // Wait for voice connection to be ready before playing
       await new Promise((resolve, reject) => {
-        if (connection.state.status === VoiceConnectionStatus.Ready) {
+        if ((connection as any).state.status === VoiceConnectionStatus.Ready) {
           console.log(`[VoiceService] Connection already ready for ${guild.name}`);
           resolve(true);
           return;
@@ -112,13 +118,13 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
           reject(new Error("Voice connection timeout"));
         }, 10000);
 
-        connection.on(VoiceConnectionStatus.Ready, () => {
+        (connection as any).on(VoiceConnectionStatus.Ready, () => {
           clearTimeout(timeout);
           console.log(`[VoiceService] Connection ready for ${guild.name}`);
           resolve(true);
         });
 
-        connection.on(VoiceConnectionStatus.Disconnected, () => {
+        (connection as any).on(VoiceConnectionStatus.Disconnected, () => {
           clearTimeout(timeout);
           reject(new Error("Voice connection disconnected"));
         });
@@ -127,11 +133,11 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
         return false;
       });
     } else {
-      console.log(`[VoiceService] Reusing existing voice connection for ${guild.name}, status: ${connection.state.status}`);
-      if (connection.state.status !== VoiceConnectionStatus.Ready) {
+      console.log(`[VoiceService] Reusing existing voice connection for ${guild.name}, status: ${(connection as any).state.status}`);
+      if ((connection as any).state.status !== VoiceConnectionStatus.Ready) {
         // Connection exists but not ready - wait for it
         await new Promise((resolve, reject) => {
-          if (connection.state.status === VoiceConnectionStatus.Ready) {
+          if ((connection as any).state.status === VoiceConnectionStatus.Ready) {
             resolve(true);
             return;
           }
@@ -139,12 +145,12 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
             reject(new Error("Voice connection timeout"));
           }, 10000);
 
-          connection.on(VoiceConnectionStatus.Ready, () => {
+          (connection as any).on(VoiceConnectionStatus.Ready, () => {
             clearTimeout(timeout);
             resolve(true);
           });
 
-          connection.on(VoiceConnectionStatus.Disconnected, () => {
+          (connection as any).on(VoiceConnectionStatus.Disconnected, () => {
             clearTimeout(timeout);
             reject(new Error("Voice connection disconnected"));
           });
@@ -189,16 +195,16 @@ export async function playAudioInGuild(guildId: string, audioUrl: string | Reada
 
       resource = createAudioResource(audioUrl as any, resourceOptions);
       console.log(`[VoiceService] Audio resource created successfully in ${guild.name}`);
-      console.log(`[VoiceService] Resource type: ${resource.type || 'unknown'}, duration: ${resource.duration || 'unknown'}`);
+      console.log(`[VoiceService] Resource type: ${(resource as any).type || 'unknown'}, duration: ${(resource as any).duration || 'unknown'}`);
       
       // Add stream error listener
-      resource.on('error', (err: any) => {
+      (resource as any).on('error', (err: any) => {
         console.error(`[VoiceService] Audio resource stream error in ${guild.name}:`, err);
         logFunc(`❌ Audio stream error: ${err?.message || err}`, "error");
       });
       
       // Log when stream starts playing
-      resource.on('start', () => {
+      (resource as any).on('start', () => {
         console.log(`[VoiceService] Audio stream started playing in ${guild.name}`);
       });
     } catch (resourceErr: any) {

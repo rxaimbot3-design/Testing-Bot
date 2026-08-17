@@ -120,7 +120,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           </div>
           <div>
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Bot Latency</span>
-            <span className="text-2xl font-black text-zinc-100">{server.latency > 0 ? server.latency : 18}ms</span>
+            <span className="text-2xl font-black text-zinc-100">{(server.latency ?? 18)}ms</span>
           </div>
         </div>
       </div>
@@ -146,7 +146,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           </div>
           <div className="flex items-center gap-2 bg-[#18181b] px-3 py-1.5 rounded-lg border border-zinc-800">
             <span className="text-[11px] font-bold text-zinc-400">Gateway Ping:</span>
-            <span className="text-sm font-black text-emerald-400">{server.latency > 0 ? server.latency : 16} ms</span>
+            <span className="text-sm font-black text-emerald-400">{(server.latency ?? 16)} ms</span>
             <span className="text-[10px] font-extrabold text-emerald-500/80 uppercase bg-emerald-500/10 px-1.5 py-0.5 rounded">Ultra-Fast</span>
           </div>
         </div>

@@ -98,7 +98,7 @@ describe("Dashboard API: Session Management", () => {
   it("logs out and clears session", async () => {
     const loginRes = await request(app).post("/api/auth/login").send({ adminKey: process.env.ADMIN_SECRET });
     const cookieHeader = loginRes.headers["set-cookie"];
-    const sessionCookie = (cookieHeader as string[] || []).find((c: string) => c.startsWith("admin_session_token="));
+    const sessionCookie = Array.isArray(cookieHeader) ? cookieHeader.find((c: string) => c.startsWith("admin_session_token=")) : undefined;
     const token = sessionCookie ? sessionCookie.split(";")[0].split("=")[1] : "";
     const res = await request(app).post("/api/auth/logout").set("Cookie", `admin_session_token=${token}`);
     expect(res.status).toBe(200);

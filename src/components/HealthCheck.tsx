@@ -114,7 +114,7 @@ export default function HealthCheck({ onRefresh }: { onRefresh?: () => void }) {
       </div>
 
       <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border mb-4 ${getStatusBg(overallStatus)}`}>
-        {overallStatus === 'healthy' || overallStatus === 'up' ? (
+        {overallStatus !== 'unknown' && overallStatus !== 'degraded' && overallStatus !== 'unhealthy' ? (
           <CheckCircle className={`w-4 h-4 ${overallColor}`} />
         ) : (
           <XCircle className={`w-4 h-4 ${overallColor}`} />

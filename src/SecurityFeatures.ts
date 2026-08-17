@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { Client, Guild, Message, TextChannel, User, GuildMember, PermissionsBitField } from "discord.js";
+import { Client, Guild, Message, TextChannel, User, GuildMember, PermissionsBitField, ChannelType } from "discord.js";
 import fs from "fs";
 import crypto from "crypto";
 import path from "path";
@@ -50,42 +50,42 @@ function checkUnboundedMapSize<K, V>(name: string, map: Map<K, V>, warnAt = MEMO
 
 export function runMemoryMonitoring(): void {
   // TokenVault
-  checkUnboundedMapSize("TokenVault.encryptedTokens", TokenVault["encryptedTokens"] as Map<string, any>, 100, 500);
+  checkUnboundedMapSize("TokenVault.encryptedTokens", TokenVault["encryptedTokens"] as unknown as Map<string, any>, 100, 500);
   
   // JoinLimitShield
-  checkUnboundedMapSize("JoinLimitShield.joinHistoryByGuild", JoinLimitShield["joinHistoryByGuild"] as Map<string, any>);
-  checkUnboundedMapSize("JoinLimitShield.raidActiveByGuild", JoinLimitShield["raidActiveByGuild"] as Map<string, any>);
+  checkUnboundedMapSize("JoinLimitShield.joinHistoryByGuild", JoinLimitShield["joinHistoryByGuild"] as unknown as Map<string, any>);
+  checkUnboundedMapSize("JoinLimitShield.raidActiveByGuild", JoinLimitShield["raidActiveByGuild"] as unknown as Map<string, any>);
   
   // InviteTrackerEngine
-  checkUnboundedMapSize("InviteTrackerEngine.userInvites", InviteTrackerEngine["userInvites"] as Map<string, any>);
-  checkUnboundedMapSize("InviteTrackerEngine.invitedByMap", InviteTrackerEngine["invitedByMap"] as Map<string, any>);
+  checkUnboundedMapSize("InviteTrackerEngine.userInvites", InviteTrackerEngine["userInvites"] as unknown as Map<string, any>);
+  checkUnboundedMapSize("InviteTrackerEngine.invitedByMap", InviteTrackerEngine["invitedByMap"] as unknown as Map<string, any>);
   
   // AutoHeal
-  checkUnboundedMapSize("AutoHeal.actionHistory", AutoHeal["actionHistory"] as Map<string, any>);
-  checkUnboundedMapSize("AutoHeal.healedChannels", AutoHeal["healedChannels"] as Map<string, any>);
+  checkUnboundedMapSize("AutoHeal.actionHistory", AutoHeal["actionHistory" as keyof typeof AutoHeal] as unknown as Map<string, any>);
+  checkUnboundedMapSize("AutoHeal.healedChannels", AutoHeal["healedChannels"] as unknown as Map<string, any>);
   
   // TemporalRaidLock
-  checkUnboundedMapSize("TemporalRaidLock.lockedGuilds", TemporalRaidLock["lockedGuilds"] as Map<string, any>);
-  checkUnboundedMapSize("TemporalRaidLock.joinHistory", TemporalRaidLock["joinHistory"] as Map<string, any>);
+  checkUnboundedMapSize("TemporalRaidLock.lockedGuilds", TemporalRaidLock["lockedGuilds"] as unknown as Map<string, any>);
+  checkUnboundedMapSize("TemporalRaidLock.joinHistory", TemporalRaidLock["joinHistory"] as unknown as Map<string, any>);
   
   // AntiVanityHijack
-  checkUnboundedMapSize("AntiVanityHijack.changedCodes", AntiVanityHijack["changedCodes"] as Map<string, any>);
+  checkUnboundedMapSize("AntiVanityHijack.changedCodes", AntiVanityHijack["changedCodes"] as unknown as Map<string, any>);
   
   // EmojiStickerProtection
-  checkUnboundedMapSize("EmojiStickerProtection.knownEmojis", EmojiStickerProtection["knownEmojis"] as Map<string, any>);
-  checkUnboundedMapSize("EmojiStickerProtection.knownStickers", EmojiStickerProtection["knownStickers"] as Map<string, any>);
+  checkUnboundedMapSize("EmojiStickerProtection.knownEmojis", EmojiStickerProtection["knownEmojis"] as unknown as Map<string, any>);
+  checkUnboundedMapSize("EmojiStickerProtection.knownStickers", EmojiStickerProtection["knownStickers"] as unknown as Map<string, any>);
   
   // ForumChannelProtection
-  checkUnboundedMapSize("ForumChannelProtection.protectedTags", ForumChannelProtection["protectedTags"] as Map<string, any>);
+  checkUnboundedMapSize("ForumChannelProtection.protectedTags", ForumChannelProtection["protectedTags"] as unknown as Map<string, any>);
   
   // NukeDefense
-  checkUnboundedMapSize("NukeDefense.rolePermissionCache", NukeDefense["rolePermissionCache"] as Map<string, any>);
+  checkUnboundedMapSize("NukeDefense.rolePermissionCache", NukeDefense["rolePermissionCache" as keyof typeof NukeDefense] as unknown as Map<string, any>);
   
   // SessionHijackDetector
-  checkUnboundedMapSize("SessionHijackDetector.userSessions", SessionHijackDetector["userSessions"] as Map<string, any>);
+  checkUnboundedMapSize("SessionHijackDetector.userSessions", SessionHijackDetector["userSessions"] as unknown as Map<string, any>);
   
   // OAuthMaliciousAppDetector
-  checkUnboundedMapSize("OAuthMaliciousAppDetector.realCacheMap", OAuthMaliciousAppDetector["realCacheMap"] as Map<string, any>);
+  checkUnboundedMapSize("OAuthMaliciousAppDetector.realCacheMap", OAuthMaliciousAppDetector["realCacheMap" as keyof typeof OAuthMaliciousAppDetector] as unknown as Map<string, any>);
 }
 
 // 1. Token Vault - Encrypts the token in memory with AES-256-GCM & Disk Persistence
@@ -1050,7 +1050,7 @@ export class ServerSnapshotRestore {
           if (snapRole.hoist !== undefined && existing.hoist !== snapRole.hoist) updateData.hoist = snapRole.hoist;
           if (snapRole.mentionable !== undefined && existing.mentionable !== snapRole.mentionable) updateData.mentionable = snapRole.mentionable;
           if (Object.keys(updateData).length > 0) {
-            await existing.edit(updateData, "Snapshot restore: updating role").catch(() => {});
+            await existing.edit({ ...updateData, reason: "Snapshot restore: updating role" }).catch(() => {});
           }
         } else {
           // Create missing role
@@ -1092,7 +1092,7 @@ export class ServerSnapshotRestore {
           await guild.channels.create({
             name: snapChan.name,
             type: snapChan.type as any,
-            parent: parent,
+            parent: parent as any,
             position: snapChan.position,
             topic: snapChan.topic,
             nsfw: snapChan.nsfw,
@@ -1125,48 +1125,49 @@ export class ServerSnapshotRestore {
         const existing = guild.channels.cache.get(snapChan.id);
         if (!existing) continue;
 
+        const existingAny = existing as any;
         const updateData: any = {};
-        if (existing.name !== snapChan.name) updateData.name = snapChan.name;
-        if (existing.topic !== snapChan.topic) updateData.topic = snapChan.topic;
-        if (existing.nsfw !== snapChan.nsfw) updateData.nsfw = snapChan.nsfw;
-        if (existing.rateLimitPerUser !== snapChan.rateLimitPerUser) updateData.rateLimitPerUser = snapChan.rateLimitPerUser;
-        if (existing.position !== snapChan.position) updateData.position = snapChan.position;
+        if (existingAny.name !== snapChan.name) updateData.name = snapChan.name;
+        if (existingAny.topic !== snapChan.topic) updateData.topic = snapChan.topic;
+        if (existingAny.nsfw !== snapChan.nsfw) updateData.nsfw = snapChan.nsfw;
+        if (existingAny.rateLimitPerUser !== snapChan.rateLimitPerUser) updateData.rateLimitPerUser = snapChan.rateLimitPerUser;
+        if (existingAny.position !== snapChan.position) updateData.position = snapChan.position;
 
-        const currentParentId = existing.parentId;
+        const currentParentId = existingAny.parentId;
         if (snapChan.parentId && currentParentId !== snapChan.parentId) {
           const parent = guild.channels.cache.get(snapChan.parentId);
           if (parent) updateData.parent = parent;
         }
 
         if (Object.keys(updateData).length > 0) {
-          await existing.edit(updateData, "Snapshot restore: updating channel").catch(() => {});
+          await existingAny.edit({ ...updateData, reason: "Snapshot restore: updating channel" }).catch(() => {});
         }
 
         // Restore permission overwrites
         // Always reconcile when permissionOverwrites is defined, even if empty.
         // An empty array means "no overwrites" and should remove all existing overwrites.
         if (snapChan.permissionOverwrites) {
-          const currentOverwrites = new Map(existing.permissionOverwrites.cache.map(po => [po.id, po]));
-          const targetOverwrites = new Map(snapChan.permissionOverwrites.map(po => [po.id, po]));
+          const currentOverwrites = new Map(existingAny.permissionOverwrites.cache.map((po: any) => [po.id, po]));
+          const targetOverwrites = new Map((snapChan.permissionOverwrites as any[]).map((po: any) => [po.id, po]));
 
           // Remove overwrites not in snapshot
           for (const [id, po] of currentOverwrites) {
-            if (!targetOverwrites.has(id)) {
-              await existing.permissionOverwrites.delete(id, "Snapshot restore: removing overwrite").catch(() => {});
+            if (!targetOverwrites.has(id as string)) {
+              await existingAny.permissionOverwrites.delete(id as string, { reason: "Snapshot restore: removing overwrite" }).catch(() => {});
             }
           }
 
           // Create/update overwrites from snapshot
           for (const [id, po] of targetOverwrites) {
-            const allow = BigInt(po.allow);
-            const deny = BigInt(po.deny);
-            const current = currentOverwrites.get(id);
+            const allow = BigInt((po as any).allow);
+            const deny = BigInt((po as any).deny);
+            const current = currentOverwrites.get(id as string);
             if (current) {
-              if (current.allow.bitfield.toString() !== po.allow || current.deny.bitfield.toString() !== po.deny) {
-                await existing.permissionOverwrites.edit(id, { allow, deny }, "Snapshot restore: updating overwrite").catch(() => {});
+              if ((current as any).allow.bitfield.toString() !== (po as any).allow || (current as any).deny.bitfield.toString() !== (po as any).deny) {
+                await existingAny.permissionOverwrites.edit(id as string, { allow, deny, reason: "Snapshot restore: updating overwrite" }).catch(() => {});
               }
             } else {
-              await existing.permissionOverwrites.create({ id, allow, deny, type: po.type }, "Snapshot restore: creating overwrite").catch(() => {});
+              await existingAny.permissionOverwrites.create({ id: id as string, allow, deny, type: (po as any).type, reason: "Snapshot restore: creating overwrite" }).catch(() => {});
             }
           }
         }
@@ -1176,11 +1177,10 @@ export class ServerSnapshotRestore {
       const channelsToPosition = guild.channels.cache.filter(c => !protectedChannelIds.has(c.id));
       if (channelsToPosition.size > 0) {
         await guild.channels.setPositions(
-          channelsToPosition.map(c => {
-            const snapChan = snap.channels.find(sc => sc.id === c.id);
-            return { id: c.id, position: snapChan?.position ?? c.position };
-          }),
-          "Snapshot restore: fixing channel positions"
+          channelsToPosition.map((c: any) => {
+            const snapChan = snap.channels.find((sc: any) => sc.id === c.id);
+            return { id: c.id, position: Number(snapChan?.position ?? c.position) } as any;
+          })
         ).catch(() => {});
       }
 
@@ -1858,13 +1858,13 @@ export class DailyBackup {
         timestamp: new Date().toISOString(),
         guildId: guild.id,
         guildName: guild.name,
-        channels: Array.from(channels.values()).map(c => ({
+        channels: Array.from(channels.values()).filter(Boolean).map((c: any) => ({
           id: c.id,
           name: c.name,
           type: c.type,
           parentId: c.parentId,
           topic: (c as any).topic || null,
-          permissions: c.permissionOverwrites.cache.map(o => ({
+          permissions: c.permissionOverwrites.cache.map((o: any) => ({
             id: o.id,
             allow: o.allow.bitfield.toString(),
             deny: o.deny.bitfield.toString()

@@ -1613,7 +1613,7 @@ export async function startDiscordBot() {
     
 // 15 Minute Auto Backup (Moved inside 'ready' handler to prevent reconnect interval clearing issues)
 
-function handleRaidDetection(guild) {
+function handleRaidDetection(guild: Guild) {
     const raidCount = (raidActionCounter.get(guild.id) || 0) + 1;
     raidActionCounter.set(guild.id, raidCount);
     if (raidCount > 50 && !panicLockdownActive) {
@@ -1628,7 +1628,7 @@ function handleRaidDetection(guild) {
         (async () => {
             for (const [_, c] of guild.channels.cache) {
                 if (c.isTextBased()) {
-                    await c.permissionOverwrites.edit(guild.id, { SendMessages: false }).catch(() => {});
+                    await (c as any).permissionOverwrites.edit(guild.id, { SendMessages: false }).catch(() => {});
                 }
             }
         })().catch(() => {});
@@ -2617,11 +2617,11 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                 rolesRestoredCount++;
               }
             }
-            const categories = latest.channels.filter(c => c.type === ChannelType.GuildCategory);
-            const otherChannels = latest.channels.filter(c => c.type !== ChannelType.GuildCategory);
-            const createdCategories = new Map<string, string>();
-            for (const cat of categories) {
-              let existingCat = message.guild.channels.cache.find(gc => gc.name.toLowerCase() === cat.name.toLowerCase() && gc.type === ChannelType.GuildCategory);
+             const categories = latest.channels.filter((c: any) => c.type === ChannelType.GuildCategory);
+             const otherChannels = latest.channels.filter((c: any) => c.type !== ChannelType.GuildCategory);
+             const createdCategories = new Map<string, string>();
+             for (const cat of categories) {
+               let existingCat = message.guild.channels.cache.find(gc => gc.name.toLowerCase() === cat.name.toLowerCase() && gc.type === ChannelType.GuildCategory);
               if (!existingCat) {
                 const newCat = await message.guild.channels.create({ name: cat.name, type: ChannelType.GuildCategory, reason: "1-Click Recovery" }).catch(() => null);
                 if (newCat) createdCategories.set(cat.id, newCat.id);
@@ -3293,20 +3293,23 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
               musicState.queue = [];
               await stopAudioInGuild(guild.id);
               await interaction.reply(`⏹️ **Playback Stopped & Queue Cleared!**`);
-           } else if (commandName === "skip") {
-              if (musicState.queue.length > 0) {
-                musicState.currentTrack = musicState.queue.shift();
-                musicState.isPlaying = true;
-                musicState.isPaused = false;
-                musicState.positionSeconds = 0;
-                const played = await playAudioInGuild(guild.id, musicState.currentTrack.url, userVoiceChannel.id);
-                if (played) {
-                  await interaction.reply(`⏭️ **Skipped! Now Playing:** ${musicState.currentTrack?.title}`);
-                } else {
-                  await interaction.reply("❌ **Failed to skip:** Could not connect to voice channel or start playback.");
-                  musicState.currentTrack = null;
-                  musicState.isPlaying = false;
-                }
+            } else if (commandName === "skip") {
+               if (musicState.queue.length > 0) {
+                 const nextTrack = musicState.queue.shift() || null;
+                 musicState.currentTrack = nextTrack;
+                 musicState.isPlaying = true;
+                 musicState.isPaused = false;
+                 musicState.positionSeconds = 0;
+                 if (nextTrack) {
+                   const played = await playAudioInGuild(guild.id, nextTrack.url, userVoiceChannel.id);
+                   if (played) {
+                     await interaction.reply(`⏭️ **Skipped! Now Playing:** ${nextTrack.title}`);
+                   } else {
+                     await interaction.reply("❌ **Failed to skip:** Could not connect to voice channel or start playback.");
+                     musicState.currentTrack = null;
+                     musicState.isPlaying = false;
+                   }
+                 }
               } else {
                 musicState.currentTrack = null;
                 musicState.isPlaying = false;
@@ -4131,9 +4134,9 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
                }
            }
 
-           // 2. Recreate categories first so channels can be mapped correctly
-           const categories = latest.channels.filter(c => c.type === ChannelType.GuildCategory);
-           const otherChannels = latest.channels.filter(c => c.type !== ChannelType.GuildCategory);
+            // 2. Recreate categories first so channels can be mapped correctly
+            const categories = latest.channels.filter((c: any) => c.type === ChannelType.GuildCategory);
+            const otherChannels = latest.channels.filter((c: any) => c.type !== ChannelType.GuildCategory);
 
            // Re-create missing categories
            const createdCategories = new Map<string, string>(); // maps old parentId to new categoryId
@@ -4154,7 +4157,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
            for (const c of otherChannels) {
                const exists = guild.channels.cache.find(gc => gc.name.toLowerCase() === c.name.toLowerCase() && gc.type === c.type);
                if (!exists) {
-                   const mappedParentId = c.parentId ? (createdCategories.get(c.parentId) || guild.channels.cache.find(gc => gc.name === latest.channels.find(lc => lc.id === c.parentId)?.name)?.id) : null;
+                    const mappedParentId = c.parentId ? (createdCategories.get(c.parentId) || guild.channels.cache.find(gc => gc.name === latest.channels.find((lc: any) => lc.id === c.parentId)?.name)?.id) : null;
                    await guild.channels.create({ name: c.name, type: c.type, parent: mappedParentId || undefined, reason: "1-Click Server Recovery" }).catch(() => {});
                    channelsRestoredCount++;
                }
@@ -4620,7 +4623,7 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
       );
     });
 
-    client.on("guildAuditLogEntryCreate", async (entry, guild) => {
+    client.on("guildAuditLogEntryCreate", async (entry: any, guild: Guild) => {
       try {
         const targetGuild = guild || (entry as any).guild || ((entry as any).guildId ? client.guilds.cache.get((entry as any).guildId) : null);
         if (!targetGuild) return;

@@ -1,31 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { RateLimiter } from "../src/SecurityFeatures.js";
-import { SecurityPipeline } from "../src/security/Pipeline.js";
+import { SecurityPipeline, SecurityEvent } from "../src/security/Pipeline.js";
 
 describe("SecurityFeatures: RateLimiter", () => {
   beforeEach(() => {
     SecurityPipeline.reset();
   });
 
-  it("allows requests under limit", () => {
+  it("allows requests under limit", async () => {
     for (let i = 0; i < 4; i++) {
-      expect(RateLimiter.check("user_1")).toBe(false);
+      expect(await RateLimiter.check("user_1")).toBe(false);
     }
   });
 
-  it("blocks requests over limit", () => {
+  it("blocks requests over limit", async () => {
     for (let i = 0; i < 5; i++) {
-      RateLimiter.check("user_1");
+      await RateLimiter.check("user_1");
     }
-    expect(RateLimiter.check("user_1")).toBe(true);
+    expect(await RateLimiter.check("user_1")).toBe(true);
   });
 
-  it("tracks separate limits per key", () => {
+  it("tracks separate limits per key", async () => {
     for (let i = 0; i < 5; i++) {
-      RateLimiter.check("user_1");
+      await RateLimiter.check("user_1");
     }
-    expect(RateLimiter.check("user_1")).toBe(true);
-    expect(RateLimiter.check("user_2")).toBe(false);
+    expect(await RateLimiter.check("user_1")).toBe(true);
+    expect(await RateLimiter.check("user_2")).toBe(false);
   });
 });
 
@@ -46,7 +46,7 @@ describe("SecurityFeatures: SecurityPipeline Edge Cases", () => {
       guildId: "guild_1",
       timestamp: Date.now(),
       payload: undefined
-    };
+    } as unknown as SecurityEvent;
     const result = SecurityPipeline.processEvent(event);
     expect(result).toHaveProperty("score");
     expect(result).toHaveProperty("rule");

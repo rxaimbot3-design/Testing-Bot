@@ -47,6 +47,11 @@ export default function AuditLogsTab({ onAddLog }: AuditLogsTabProps) {
     return Array.from(set).sort();
   }, [logs]);
 
+  const actions = useMemo(() => {
+    const set = new Set(logs.map(l => l.action).filter(Boolean));
+    return Array.from(set).sort();
+  }, [logs]);
+
   useEffect(() => {
     const fetchLogs = async () => {
       try {

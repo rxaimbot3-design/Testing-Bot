@@ -24,7 +24,7 @@ export interface AuditLog {
   time: string;
   user: string;
   action: string;
-  severity: 'low' | 'medium' | 'high';
+  severity: 'low' | 'medium' | 'high' | 'critical';
   hash?: string; // For immutable audit trail verification
 }
 

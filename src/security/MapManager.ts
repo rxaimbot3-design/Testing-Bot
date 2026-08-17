@@ -146,7 +146,9 @@ export class LruMap<K, V> {
       this.map.delete(key);
     } else if (this.map.size >= this.maxEntries) {
       const firstKey = this.map.keys().next().value;
-      this.map.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.map.delete(firstKey);
+      }
     }
     this.map.set(key, value);
   }

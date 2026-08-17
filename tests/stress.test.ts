@@ -44,7 +44,7 @@ describe("Stress: Malformed and Corrupt Data", () => {
       { type: 123, userId: {}, guildId: [], timestamp: new Date(), payload: () => {} },
     ];
     badEvents.forEach((e) => {
-      expect(() => SecurityPipeline.processEvent(e as SecurityEvent)).not.toThrow();
+      expect(() => SecurityPipeline.processEvent(e as unknown as SecurityEvent)).not.toThrow();
     });
   });
 

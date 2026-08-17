@@ -3,7 +3,7 @@ export interface MusicTrack {
   title: string;
   artist: string;
   durationSeconds: number;
-  url?: string | ReadableStream<any>;
+  url: string | ReadableStream<any>;
   thumbnail?: string;
   requestedBy?: string;
 }
@@ -177,17 +177,19 @@ export async function getAudioStreamDetails(query: string) {
               const searchResults = await play.search(`spotify track ${spotifyMatch[1]}`, { limit: 1 });
               if (searchResults && searchResults.length > 0) {
                 const first = searchResults[0];
-                const ytInfo = await play.video_info(first.id);
-                const ytDetails = (ytInfo as any).video_details;
-                if (ytDetails) {
-                  title = ytDetails.title || title;
-                  artist = ytDetails.channel?.name || artist;
-                  durationSeconds = Math.round((ytDetails.durationInSec || 210));
-                  thumbnail = ytDetails.thumbnails?.[0]?.url || thumbnail;
-                  const streams = (ytInfo as any).streams;
-                  if (streams && streams.length > 0) {
-                    songUrl = streams[0].url || songUrl;
-                    return { songUrl, title, artist, durationSeconds, thumbnail };
+                if (first.id) {
+                  const ytInfo = await play.video_info(first.id);
+                  const ytDetails = (ytInfo as any).video_details;
+                  if (ytDetails) {
+                    title = ytDetails.title || title;
+                    artist = ytDetails.channel?.name || artist;
+                    durationSeconds = Math.round((ytDetails.durationInSec || 210));
+                    thumbnail = ytDetails.thumbnails?.[0]?.url || thumbnail;
+                    const streams = (ytInfo as any).streams;
+                    if (streams && streams.length > 0) {
+                      songUrl = streams[0].url || songUrl;
+                      return { songUrl, title, artist, durationSeconds, thumbnail };
+                    }
                   }
                 }
               }

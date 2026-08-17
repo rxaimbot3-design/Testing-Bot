@@ -295,7 +295,7 @@ class WorkerEngine {
 
     try {
       const results = await this.sendRequest("scan_batch", requests);
-      this.fallbackCounter = 0;
+      this.scanFailureCount = 0;
       return results;
     } catch {
       this.scanFailureCount++;
@@ -388,7 +388,7 @@ class WorkerEngine {
     }
   }
 
-  private fallbackScanBatch(requests: ScanRequest[]): Array<{ passed: boolean; latencyMicros: number; score: number }> {
+   private fallbackScanBatch(requests: ScanRequest[]): Array<{ passed: boolean; latencyMicros: number; score: number }> {
     const view32 = this.fallbackBuffer?.view32;
     return requests.map((req) => {
       const startTime = process.hrtime.bigint();
@@ -398,7 +398,7 @@ class WorkerEngine {
       if (req.riskWeight > 0) {
         try {
           const pipelineEvent: SecurityEvent = {
-            type: this.mapRiskWeightToEventType(req.riskWeight),
+            type: SyncEngine.mapRiskWeightToEventType(req.riskWeight),
             userId: String(req.packetId),
             guildId: "default",
             timestamp: Date.now(),
@@ -501,7 +501,7 @@ class SyncEngine {
     const startTime = process.hrtime.bigint();
     try {
       const pipelineEvent: SecurityEvent = {
-        type: this.mapRiskWeightToEventType(riskWeight),
+        type: SyncEngine.mapRiskWeightToEventType(riskWeight),
         userId: String(packetId),
         guildId: "default",
         timestamp: Date.now(),
@@ -521,7 +521,7 @@ class SyncEngine {
     }
   }
 
-  private static mapRiskWeightToEventType(riskWeight: number): string {
+  static mapRiskWeightToEventType(riskWeight: number): string {
     if (riskWeight >= 80) return "permission_update";
     if (riskWeight >= 60) return "webhook_update";
     if (riskWeight >= 40) return "role_update";
@@ -619,7 +619,7 @@ export class CppNativeEngine {
 
     try {
       const pipelineEvent: SecurityEvent = {
-        type: this.mapRiskWeightToEventType(safeRiskWeight),
+        type: SyncEngine.mapRiskWeightToEventType(safeRiskWeight),
         userId: String(safePacketId),
         guildId: "default",
         timestamp: Date.now(),
@@ -636,14 +636,6 @@ export class CppNativeEngine {
       const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
       return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
     }
-  }
-
-  private static mapRiskWeightToEventType(riskWeight: number): string {
-    if (riskWeight >= 80) return "permission_update";
-    if (riskWeight >= 60) return "webhook_update";
-    if (riskWeight >= 40) return "role_update";
-    if (riskWeight >= 20) return "channel_delete";
-    return "guild_kick";
   }
 
   static async batchScanPackets(requests: ScanRequest[]): Promise<Array<{ passed: boolean; latencyMicros: number; score: number }>> {

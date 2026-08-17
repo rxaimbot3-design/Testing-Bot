@@ -138,7 +138,7 @@ describe("SecurityPipeline: Advanced Attack Scenarios", () => {
     expect(score1).toBeGreaterThanOrEqual(40);
     
     // User gets quarantined
-    SecurityPipeline.recentQuarantines.set("nuker_1", now);
+    (SecurityPipeline as any).recentQuarantines.set("nuker_1", now);
     
     // Second batch - score should be dampened
     const events2 = Array.from({ length: 5 }, (_, i) => ({

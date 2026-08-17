@@ -119,7 +119,7 @@ describe("Security Pipeline: Independent Stages", () => {
   });
 
   it("handles invalid/malformed events gracefully", () => {
-    const badEvent = { type: "", userId: "", guildId: "", timestamp: NaN, payload: null } as SecurityEvent;
+    const badEvent = { type: "", userId: "", guildId: "", timestamp: NaN, payload: null } as unknown as SecurityEvent;
     const result = SecurityPipeline.processEvent(badEvent);
     expect(result).toBeDefined();
     expect(typeof result.blocked).toBe("boolean");

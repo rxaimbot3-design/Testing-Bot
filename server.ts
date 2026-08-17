@@ -133,7 +133,7 @@ try {
 }
 
 export function logAdminAuditAction(action: string, req: express.Request, details: any = {}) {
-  const actorIp = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
+  const actorIp = req.ip || "127.0.0.1";
   const record = {
     timestamp: new Date().toISOString(),
     action,
@@ -534,17 +534,27 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-  trackError(`Unhandled Rejection: ${reason}`, "server");
-});
+let listenersRegistered = false;
+function registerProcessListeners() {
+  if (listenersRegistered) return;
+  listenersRegistered = true;
+  process.setMaxListeners(20);
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("Unhandled Rejection at:", promise, "reason:", reason);
+    trackError(`Unhandled Rejection: ${reason}`, "server");
+  });
 
-process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception thrown:", err);
-  trackError(`Uncaught Exception: ${err.message}`, "server", err.stack);
-  // Security-critical service: prefer controlled shutdown over running in potentially corrupted state
-  gracefulShutdown("UNCAUGHT_EXCEPTION").finally(() => process.exit(1));
-});
+  process.on("uncaughtException", (err) => {
+    console.error("Uncaught Exception thrown:", err);
+    trackError(`Uncaught Exception: ${err.message}`, "server", err.stack);
+    // Security-critical service: prefer controlled shutdown over running in potentially corrupted state
+    gracefulShutdown("UNCAUGHT_EXCEPTION").finally(() => process.exit(1));
+  });
+
+  process.once("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.once("SIGINT", () => gracefulShutdown("SIGINT"));
+}
+registerProcessListeners();
 
 let isShuttingDown = false;
 const recentErrors: Array<{ timestamp: string; message: string; stack?: string; source: string; severity?: 'low' | 'medium' | 'high' | 'critical'; type?: string }> = [];
@@ -598,7 +608,7 @@ function saveRiskScoreHistory() {
   try {
     if (!fs.existsSync(path.join(process.cwd(), "data"))) fs.mkdirSync(path.join(process.cwd(), "data"), { recursive: true });
     fs.writeFileSync(RISK_HISTORY_FILE, JSON.stringify(riskScoreHistory, null, 2));
-  } catch (err) {
+  } catch (err: any) {
     console.error("[RISK_HISTORY] Failed to persist:", err.message);
   }
 }
@@ -611,7 +621,7 @@ function loadRiskScoreHistory() {
         riskScoreHistory.push(...parsed.slice(-MAX_RISK_HISTORY));
       }
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("[RISK_HISTORY] Failed to load:", err.message);
   }
 }
@@ -624,7 +634,7 @@ function saveBackupHistory() {
     if (!fs.existsSync(path.join(process.cwd(), "data"))) fs.mkdirSync(path.join(process.cwd(), "data"), { recursive: true });
     fs.writeFileSync(BACKUP_HISTORY_FILE, JSON.stringify(backupHistory, null, 2));
     fs.writeFileSync(BACKUP_STATE_FILE, JSON.stringify({ lastBackupTimestamp }, null, 2));
-  } catch (err) {
+  } catch (err: any) {
     console.error("[BACKUP_HISTORY] Failed to persist:", err.message);
   }
 }
@@ -644,7 +654,7 @@ function loadBackupHistory() {
         lastBackupTimestamp = parsed.lastBackupTimestamp;
       }
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("[BACKUP_HISTORY] Failed to load:", err.message);
   }
 }
@@ -658,7 +668,7 @@ function startBackupScheduler() {
       const durationMs = Date.now() - startTime;
       const durationSec = Math.max(0, durationMs / 1000).toFixed(1);
       lastBackupTimestamp = Date.now();
-      let verificationState = result.success ? 'integrity-checked' : 'pending';
+      let verificationState: 'pending' | 'integrity-checked' | 'restore-tested' | 'verified' = result.success ? 'integrity-checked' : 'pending';
       if (result.success) {
         try {
           const integrityResult = await runBackupIntegrityTest();
@@ -798,8 +808,7 @@ async function gracefulShutdown(signal: string) {
   process.exit(0);
 }
 
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.setMaxListeners(20);
 
 // Enable JSON & Cookie parsing
 
@@ -842,7 +851,8 @@ app.use((req, res, next) => {
     next();
   } catch (err) {
     console.error("IP Ban Middleware error:", err);
-    next();
+    // Security-critical: fail closed on unexpected errors
+    return res.status(403).send(`⛔ ACCESS DENIED - IP Address verification failed.`);
   }
 });
 
@@ -1533,7 +1543,7 @@ app.post("/api/enterprise/zero-downtime-restart", requireAdminAuth, heavyOpRateL
   }
 });
 
-app.post("/api/enterprise/hot-reload", requireAdminAuth, heavyOpRateLimit, (req, res) => {
+app.post("/api/enterprise/hot-reload", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   logAdminAuditAction("HOT_RELOAD_MODULES", req, req.body);
   const { moduleName } = req.body || {};
   const startTime = Date.now();
@@ -1542,7 +1552,7 @@ app.post("/api/enterprise/hot-reload", requireAdminAuth, heavyOpRateLimit, (req,
     // Real hot-reload operations
     EnvScanner.scan();
     validateEnvironmentVariables();
-    RateLimiter.check("system_flush");
+    await RateLimiter.check("system_flush");
     IPBanSystem.loadIPBans();
     
     const reloaded = moduleName ? [moduleName] : ["SecurityFeatures", "RateLimiter", "EnvValidator", "IPBanSystem", "CppNativeEngine"];
@@ -2251,14 +2261,15 @@ app.post("/api/bot/music/control", requireAdminAuth, async (req, res) => {
         
         const { songUrl, title, artist, durationSeconds, thumbnail } = await getAudioStreamDetails(query);
 
-        const newTrack: MusicTrack = track || {
-          id: `track_${Date.now()}`,
-          title,
-          artist,
-          durationSeconds: durationSeconds || 210,
-          url: songUrl,
-          thumbnail: thumbnail || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500",
-          requestedBy: payload?.requestedBy || "Dashboard User"
+        const newTrack: MusicTrack = {
+          ...(track || {}),
+          id: track?.id || `track_${Date.now()}`,
+          title: track?.title || title,
+          artist: track?.artist || artist,
+          durationSeconds: track?.durationSeconds || durationSeconds || 210,
+          url: track?.url || songUrl,
+          thumbnail: track?.thumbnail || thumbnail || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500",
+          requestedBy: track?.requestedBy || payload?.requestedBy || "Dashboard User"
         };
 
         if (!state.currentTrack && !state.isPlaying) {
@@ -2468,6 +2479,15 @@ app.get("/api/enterprise/cache-status", requireAdminAuth, (req, res) => {
   });
 });
 
+app.get("/api/enterprise/mongo-redis", requireAdminAuth, (req, res) => {
+  res.json({
+    cacheEngine: "Redis",
+    cacheStats: MongoRedisEngine.getRedisStats(),
+    mongoConfigured: MongoRedisEngine.isMongoConnected,
+    note: "MongoDB is configured via environment variables. Redis connection status is reported above."
+  });
+});
+
 app.post("/api/enterprise/cache-backup", requireAdminAuth, heavyOpRateLimit, async (req, res) => {
   try {
     logAdminAuditAction("PERFORM_CACHE_BACKUP", req);
@@ -2477,14 +2497,14 @@ app.post("/api/enterprise/cache-backup", requireAdminAuth, heavyOpRateLimit, asy
     const durationSec = Math.max(0, durationMs / 1000).toFixed(1);
     addBotLog(`[ENTERPRISE] Created Cache Backup at ${result.timestamp}`, "success");
     // Record backup in history for dashboard
-    let verificationState = result.success ? 'integrity-checked' : 'pending';
+    let verificationState: 'pending' | 'integrity-checked' | 'restore-tested' | 'verified' = result.success ? 'integrity-checked' : 'pending';
     if (result.success) {
       try {
         const integrityResult = await runBackupIntegrityTest();
         if (integrityResult.passed) {
           verificationState = 'restore-tested';
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('[BACKUP] Enterprise integrity test failed:', err);
       }
     }
@@ -2854,28 +2874,33 @@ app.post("/api/github/push", requireAdminAuth, async (req, res) => {
 
     await execFileAsync("git", ["remote", "add", "origin", remoteUrl]);
 
-    const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token.trim()}`).toString("base64")}`;
+    // Use temporary .netrc with strict permissions instead of env variables
+    // to avoid token exposure in /proc/<pid>/environ
+    const netrcPath = path.join(process.cwd(), `.netrc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    try {
+      fs.writeFileSync(netrcPath, `machine github.com\nlogin x-access-token\npassword ${token.trim()}\n`, { mode: 0o600 });
+      const { stdout, stderr } = await execFileAsync("git", ["push", "-u", "origin", cleanBranch], {
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: "0",
+          HOME: process.env.HOME || process.cwd(),
+          NETRC: netrcPath
+        }
+      });
 
-    const { stdout, stderr } = await execFileAsync("git", ["push", "-u", "origin", cleanBranch], {
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_CONFIG_COUNT: "1",
-        GIT_CONFIG_KEY_0: `http.https://github.com/${cleanRepo}.git.extraheader`,
-        GIT_CONFIG_VALUE_0: authHeader
-      }
-    });
+      addBotLog(`Direct GitHub Push succeeded to repository: ${cleanRepo}`, "success");
 
-    addBotLog(`Direct GitHub Push succeeded to repository: ${cleanRepo}`, "success");
-
-    return res.json({
-      success: true,
-      message: `✅ Direct Push successful! Codebase pushed to https://github.com/${cleanRepo}`,
-      repo: cleanRepo,
-      branch: cleanBranch,
-      logs: stdout || stderr || "Push completed with exit code 0",
-      isDemo: false
-    });
+      return res.json({
+        success: true,
+        message: `✅ Direct Push successful! Codebase pushed to https://github.com/${cleanRepo}`,
+        repo: cleanRepo,
+        branch: cleanBranch,
+        logs: stdout || stderr || "Push completed with exit code 0",
+        isDemo: false
+      });
+    } finally {
+      try { fs.unlinkSync(netrcPath); } catch {}
+    }
   } catch (err: any) {
     const sanitizedError = sanitizeGitError(err.message || String(err));
     console.error("Failed direct push to GitHub:", sanitizedError);
@@ -3218,14 +3243,14 @@ app.post("/api/analytics/backups", requireAdminAuth, heavyOpRateLimit, async (re
     lastBackupTimestamp = Date.now();
     addBotLog(`[ENTERPRISE] Manual Cache Backup at ${result.timestamp}`, "success");
     // Record backup in history for dashboard
-    let verificationState = result.success ? 'integrity-checked' : 'pending';
+    let verificationState: 'pending' | 'integrity-checked' | 'restore-tested' | 'verified' = result.success ? 'integrity-checked' : 'pending';
     if (result.success) {
       try {
         const integrityResult = await runBackupIntegrityTest();
         if (integrityResult.passed) {
           verificationState = 'restore-tested';
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('[BACKUP] Integrity test failed:', err);
       }
     }
@@ -3255,7 +3280,7 @@ app.post("/api/analytics/backups/:id/restore", requireAdminAuth, heavyOpRateLimi
     if (!backup) return res.status(404).json({ success: false, error: "Backup not found" });
     
     logAdminAuditAction("BACKUP_RESTORE", req, { backupId });
-    addBotLog(`[ENTERPRISE] Restore initiated for backup ${backupId}`, "medium");
+    addBotLog(`[ENTERPRISE] Restore initiated for backup ${backupId}`, "info");
     
     // In a real implementation, this would restore the backup file to the cache/Redis
     // For now, we simulate a successful restore operation
@@ -3275,7 +3300,7 @@ app.post("/api/analytics/backups/:id/test-restore", requireAdminAuth, heavyOpRat
     if (!backup) return res.status(404).json({ success: false, error: "Backup not found" });
     
     logAdminAuditAction("BACKUP_TEST_RESTORE", req, { backupId });
-    addBotLog(`[ENTERPRISE] Test restore initiated for backup ${backupId}`, "medium");
+    addBotLog(`[ENTERPRISE] Test restore initiated for backup ${backupId}`, "info");
     
     // Simulate integrity check and test restore
     const integrityCheck = backup.status === 'success' && backup.verified && backup.verified !== 'pending';
@@ -3308,22 +3333,24 @@ app.get("/api/analytics/risk-score", requireAdminAuth, (req, res) => {
   const stats = getSecurityStats();
   const cppMetrics = CppNativeEngine.getMetrics();
   const redisStats = MongoRedisEngine.getRedisStats();
+  const ipBans = IPBanSystem.loadIPBans();
+  const ipBansCount = ipBans.length;
 
   // Calculate category scores from real system state
   const categories = [
     {
       name: 'Threat Detection',
-      score: Math.min(100, Math.max(20, 40 + (stats.blockedAttacksCount * 2) + (cppMetrics.status === 'ONLINE' ? 25 : 0) + (stats.real100NukerDefenseActive ? 15 : 0))),
+      score: Math.min(100, Math.max(20, 40 + (stats.blockedAttacksCount * 2) + (cppMetrics.status === 'ACTIVE_MICROSECOND' ? 25 : 0) + (stats.real100NukerDefenseActive ? 15 : 0))),
       weight: 0.25,
       trend: stats.blockedAttacksCount > 0 ? 'up' : 'stable',
       details: `Blocked ${stats.blockedAttacksCount} attacks. C++ engine ${cppMetrics.status}. Defense active: ${stats.real100NukerDefenseActive}`
     },
     {
       name: 'Network Security',
-      score: Math.min(100, Math.max(20, 50 + (stats.ipBansCount || 0) * 2 + (redisStats.connected ? 15 : 0) + (cppMetrics.status === 'ONLINE' ? 10 : 0))),
+      score: Math.min(100, Math.max(20, 50 + ipBansCount * 2 + (redisStats.connected ? 15 : 0) + (cppMetrics.status === 'ACTIVE_MICROSECOND' ? 10 : 0))),
       weight: 0.2,
-      trend: (stats.ipBansCount || 0) > 0 ? 'up' : 'stable',
-      details: `IP bans: ${stats.ipBansCount || 0}. Redis: ${redisStats.connected ? 'connected' : 'disconnected'}. Engine: ${cppMetrics.status}`
+      trend: ipBansCount > 0 ? 'up' : 'stable',
+      details: `IP bans: ${ipBansCount}. Redis: ${redisStats.connected ? 'connected' : 'disconnected'}. Engine: ${cppMetrics.status}`
     },
     {
       name: 'Authentication',
@@ -3334,14 +3361,14 @@ app.get("/api/analytics/risk-score", requireAdminAuth, (req, res) => {
     },
     {
       name: 'Data Protection',
-      score: Math.min(100, Math.max(20, 40 + (MongoRedisEngine.isMongoConnected ? 20 : 0) + (redisStats.connected ? 15 : 0) + (cppMetrics.status === 'ONLINE' ? 10 : 0))),
+      score: Math.min(100, Math.max(20, 40 + (MongoRedisEngine.isMongoConnected ? 20 : 0) + (redisStats.connected ? 15 : 0) + (cppMetrics.status === 'ACTIVE_MICROSECOND' ? 10 : 0))),
       weight: 0.15,
       trend: MongoRedisEngine.isMongoConnected && redisStats.connected ? 'stable' : 'down',
       details: `MongoDB: ${MongoRedisEngine.isMongoConnected ? 'configured' : 'not configured'}. Redis: ${redisStats.connected ? 'connected' : 'disconnected'}`
     },
     {
       name: 'Compliance',
-      score: Math.min(100, Math.max(20, 45 + (stats.verifiedRoleChannelAuditStatus.includes('Audited') ? 20 : 0) + (stats.ownerWhitelist.length > 0 ? 15 : 0) + (cppMetrics.status === 'ONLINE' ? 10 : 0))),
+      score: Math.min(100, Math.max(20, 45 + (stats.verifiedRoleChannelAuditStatus.includes('Audited') ? 20 : 0) + (stats.ownerWhitelist.length > 0 ? 15 : 0) + (cppMetrics.status === 'ACTIVE_MICROSECOND' ? 10 : 0))),
       weight: 0.15,
       trend: 'stable',
       details: `Role audit: ${stats.verifiedRoleChannelAuditStatus}. Whitelist active: ${stats.ownerWhitelist.length > 0}. Engine: ${cppMetrics.status}`

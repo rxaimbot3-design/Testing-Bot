@@ -315,7 +315,7 @@ export default function App() {
   // Economy Leaderboard State
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
 
-  const handleAddLog = (action: string, severity: 'low' | 'medium' | 'high' = 'low') => {
+  const handleAddLog = (action: string, severity: 'low' | 'medium' | 'high' | 'critical' = 'low') => {
     const newEntry: AuditLog = {
       id: `log-${Date.now()}`,
       time: new Date().toLocaleTimeString(),
