@@ -408,8 +408,9 @@ class WorkerEngine {
           score = result.score;
           passed = !result.blocked;
         } catch {
-          score = Math.max(0, Math.min(100, req.riskWeight / 10));
-          passed = score < 50;
+          // Fail-closed: block packet when security pipeline errors
+          score = 100;
+          passed = false;
         }
       }
       
@@ -516,8 +517,8 @@ class SyncEngine {
       };
     } catch {
       const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
-      const score = Math.min(100, Math.max(0, riskWeight / 10));
-      return { passed: score < 50, latencyMicros, score };
+      // Fail-closed: block packet when security pipeline errors
+      return { passed: false, latencyMicros, score: 100 };
     }
   }
 

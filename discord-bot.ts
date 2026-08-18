@@ -66,6 +66,14 @@ export const userSpamTracker = new Map<string, number[]>();
 export const userViolations = new Map<string, { count: number, timestamp: number }>();
 export let presenceRotatorInterval: NodeJS.Timeout | null = null;
 
+async function withRetry<T>(op: () => Promise<T>, label: string): Promise<T | undefined> {
+  try {
+    return await withExponentialBackoff(op, 3, 1000);
+  } catch (err: any) {
+    addBotLog(`🚨 CRITICAL: Discord API failure [${label}]: ${err.message}`, "error");
+  }
+}
+
 // ==================== ENTERPRISE UTILITY & PRIVACY HELPERS ====================
 
 // 5. GDPR Compliance & User Data Privacy Engine
@@ -762,7 +770,9 @@ async function notifyServerOwner(guild: Guild, executorId: string, actionType: s
                  "• **Victim Details:** " + victimDetails + "\n" +
                  "• **Rogue Admin:** <@" + executorId + "> (`" + executorId + "`)\n" +
                  "• **Status:** ✅ Rogue admin was **BANNED & Roles Stripped** instantly by Zero Trust policy."
-      }).catch(() => {});
+      }).catch((err) => {
+        addBotLog(`⚠️ Could not send success DM to server owner: ${err.message}`, "warning");
+      });
     } else {
       await dm.send({
         content: "⚠️ **CRITICAL ZERO TRUST ALERT (" + guild.name + ")**\n\n" +
@@ -774,9 +784,11 @@ async function notifyServerOwner(guild: Guild, executorId: string, actionType: s
                  "👉 **ACTION REQUIRED BY SERVER OWNER IMMEDIATELY:**\n" +
                  "1. Open **Server Settings -> Roles**\n" +
                  "2. Drag the **Bot's Role to the VERY TOP** of the Role list (above all Admin/Staff roles)\n" +
-                 "3. Ensure the Bot has **Ban Members**, **Manage Roles**, and **View Audit Log** permissions\n" +
+                 "3. Ensure the Bot has **Ban Members**, **Manage Roles**, and **View Audit Log** permissions!\n" +
                  "4. Manually ban <@" + executorId + ">"
-      }).catch(() => {});
+      }).catch((err) => {
+        addBotLog(`⚠️ Could not send failure DM to server owner: ${err.message}`, "warning");
+      });
     }
     addBotLog("📩 [OWNER NOTIFIED] Direct DM alert sent to Server Owner <@" + guild.ownerId + "> regarding Rogue Admin <@" + executorId + ">.", "info");
   } catch (e: any) {
@@ -835,7 +847,9 @@ export async function punishRogueAdmin(guild: Guild, executorId: string, actionT
             ManageChannels: false,
             ManageRoles: false,
             ManageWebhooks: false
-          }, { reason: `Zero Trust Emergency Lockout: Unauthorized ${actionType}` }).catch(() => {});
+          }, { reason: `Zero Trust Emergency Lockout: Unauthorized ${actionType}` }).catch((err) => {
+            addBotLog(`⚠️ Could not create permission overwrite for <@${executorId}> on channel ${ch.id}: ${err.message}`, "warning");
+          });
         }
       }
       addBotLog(`🔒 [ZERO TRUST LOCKOUT] Applied channel permission isolation cage to Rogue Admin ID ${executorId} across all channels!`, "success");
@@ -850,18 +864,20 @@ export async function punishRogueAdmin(guild: Guild, executorId: string, actionT
     await attacker.roles.set([], `Zero Trust Policy: ${actionType}`).then(() => {
       addBotLog(`🛡️ [ZERO TRUST] Stripped all roles from Rogue Admin <@${executorId}>`, "info");
       success = true;
-    }).catch(async (e) => {
-      addBotLog(`⚠️ Could not strip all roles from Rogue Admin <@${executorId}>: ${e.message}. Attempting individual lower role removal...`, "warning");
-      if (me) {
-        const removableRoles = attacker.roles.cache.filter(r => r.id !== guild.id && r.position < me.roles.highest.position);
-        if (removableRoles.size > 0) {
-          await attacker.roles.remove(removableRoles, `Zero Trust: Stripping staff roles`).then(() => {
-            addBotLog(`🛡️ [ZERO TRUST] Stripped ${removableRoles.size} staff roles from Rogue Admin <@${executorId}>!`, "info");
-            success = true;
-          }).catch(() => {});
-        }
-      }
-    });
+          }).catch(async (e) => {
+            addBotLog(`⚠️ Could not strip all roles from Rogue Admin <@${executorId}>: ${e.message}. Attempting individual lower role removal...`, "warning");
+            if (me) {
+              const removableRoles = attacker.roles.cache.filter(r => r.id !== guild.id && r.position < me.roles.highest.position);
+              if (removableRoles.size > 0) {
+                await attacker.roles.remove(removableRoles, `Zero Trust: Stripping staff roles`).then(() => {
+                  addBotLog(`🛡️ [ZERO TRUST] Stripped ${removableRoles.size} staff roles from Rogue Admin <@${executorId}>!`, "info");
+                  success = true;
+                }).catch((err) => {
+                  addBotLog(`❌ Failed to remove individual roles from Rogue Admin <@${executorId}>: ${err.message}`, "error");
+                });
+              }
+            }
+          });
 
     // 3. Direct Member Ban
     await attacker.ban({ deleteMessageSeconds: 604800, reason: `Zero Trust IP Ban: ${actionType}` }).then(() => {
@@ -919,6 +935,16 @@ export async function punishRogueAdmin(guild: Guild, executorId: string, actionT
     color: success ? 0xDC2626 : 0xF59E0B
   });
   await notifyServerOwner(guild, executorId, actionType, victimDetails, success, errorMsg);
+
+  // Fail-closed: if all enforcement actions failed, escalate to lockdown
+  if (!success) {
+    addBotLog(`🚨 [FAIL-CLOSED] All enforcement actions failed for Rogue Admin <@${executorId}>. Escalating to lockdown.`, "error");
+    try {
+      setPanicLockdown(true, 3600000); // 1 hour lockdown
+    } catch {
+      // ignore
+    }
+  }
 }
 
 
@@ -965,7 +991,9 @@ async function emergencyQuarantine(guild: Guild): Promise<void> {
     for (const [id, role] of roles) {
         if (role.position < botRolePosition && !role.managed && id !== guild.id) {
             if (role.permissions.has("Administrator") || role.permissions.has("ManageChannels") || role.permissions.has("ManageRoles") || role.permissions.has("ManageGuild")) {
-                await role.setPermissions(role.permissions.remove(["Administrator", "ManageChannels", "ManageRoles", "ManageGuild", "ManageWebhooks", "BanMembers", "KickMembers"]), "GOD MODE: Quarantining Rogue Roles").catch(() => {});
+                await role.setPermissions(role.permissions.remove(["Administrator", "ManageChannels", "ManageRoles", "ManageGuild", "ManageWebhooks", "BanMembers", "KickMembers"]), "GOD MODE: Quarantining Rogue Roles").catch((err) => {
+                    addBotLog(`⚠️ Could not quarantine role <@${role.id}>: ${err.message}`, "warning");
+                });
             }
         }
     }
@@ -976,7 +1004,9 @@ async function emergencyQuarantine(guild: Guild): Promise<void> {
             await ch.permissionOverwrites.edit(guild.roles.everyone, {
                 SendMessages: false,
                 Connect: false
-            }).catch(() => {});
+            }).catch((err) => {
+                addBotLog(`⚠️ Could not lockdown channel ${ch.id}: ${err.message}`, "warning");
+            });
         }
     }
     
@@ -1183,36 +1213,38 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
     let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === "verify" || c.name.toLowerCase() === "verification") as TextChannel;
     if (!verifyChannel) {
       try {
-        verifyChannel = await guild.channels.create({
+        verifyChannel = await withRetry(() => guild.channels.create({
           name: "verify",
           type: ChannelType.GuildText,
           reason: "Zero Trust Verification Channel"
-        });
+        }), "create verify channel");
         if (verifyChannel) markBotCreatedChannel(verifyChannel.id);
-      } catch (cErr: any) {}
+      } catch (cErr: any) {
+        addBotLog(`🚨 CRITICAL: Failed to create verify channel: ${cErr.message}`, "error");
+      }
     }
 
     if (verifyChannel) {
-      await verifyChannel.permissionOverwrites.edit(guild.roles.everyone, {
+      await withRetry(() => verifyChannel.permissionOverwrites.edit(guild.roles.everyone, {
         ViewChannel: true,
         ReadMessageHistory: true,
         SendMessages: false,
         AddReactions: false
-      }).catch(() => {});
+      }), "verify channel @everyone permissions");
 
-      await verifyChannel.permissionOverwrites.edit(unverifiedRole, {
+      await withRetry(() => verifyChannel.permissionOverwrites.edit(unverifiedRole, {
         ViewChannel: true,
         ReadMessageHistory: true,
         SendMessages: false,
         AddReactions: false
-      }).catch(() => {});
+      }), "verify channel unverified permissions");
 
-      await verifyChannel.permissionOverwrites.edit(verifiedRole, {
+      await withRetry(() => verifyChannel.permissionOverwrites.edit(verifiedRole, {
         ViewChannel: false
-      }).catch(() => {});
+      }), "verify channel verified permissions");
 
       try {
-        const existingMsgs = await verifyChannel.messages.fetch({ limit: 10 }).catch(() => null);
+        const existingMsgs = await withRetry(() => verifyChannel.messages.fetch({ limit: 10 }), "fetch verify channel messages") ?? null;
         const hasPanel = existingMsgs?.some(m => m.author.id === guild.members.me?.id && m.components.length > 0);
         if (!hasPanel) {
           const embed = new EmbedBuilder()
@@ -1233,9 +1265,11 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
               .setStyle(ButtonStyle.Success)
           );
 
-          await verifyChannel.send({ embeds: [embed], components: [row] });
+          await withRetry(() => verifyChannel.send({ embeds: [embed], components: [row] }), "send verification panel");
         }
-      } catch (msgErr: any) {}
+      } catch (msgErr: any) {
+        addBotLog(`🚨 CRITICAL: Failed to send verification panel: ${msgErr.message}`, "error");
+      }
     }
 
     const channels = await guild.channels.fetch();
@@ -1263,22 +1297,22 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
 
       if (channel.type === ChannelType.GuildCategory) {
         if (isHidden) {
-          await channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
-          await channel.permissionOverwrites.edit(unverifiedRole, { ViewChannel: false }).catch(() => {});
-          await channel.permissionOverwrites.edit(verifiedRole, { ViewChannel: false }).catch(() => {});
+          await withRetry(() => channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }), `category ${channel.name} @everyone`);
+          await withRetry(() => channel.permissionOverwrites.edit(unverifiedRole, { ViewChannel: false }), `category ${channel.name} unverified`);
+          await withRetry(() => channel.permissionOverwrites.edit(verifiedRole, { ViewChannel: false }), `category ${channel.name} verified`);
         } else {
-          await channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true, Connect: true }).catch(() => {});
-          await channel.permissionOverwrites.edit(unverifiedRole, { ViewChannel: true, Connect: true }).catch(() => {});
-          await channel.permissionOverwrites.edit(verifiedRole, { ViewChannel: true, Connect: true }).catch(() => {});
+          await withRetry(() => channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true, Connect: true }), `category ${channel.name} @everyone`);
+          await withRetry(() => channel.permissionOverwrites.edit(unverifiedRole, { ViewChannel: true, Connect: true }), `category ${channel.name} unverified`);
+          await withRetry(() => channel.permissionOverwrites.edit(verifiedRole, { ViewChannel: true, Connect: true }), `category ${channel.name} verified`);
         }
         continue;
       }
 
       if (isHidden) {
         hiddenChannels++;
-        await channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false, SendMessages: false, Connect: false }).catch(() => {});
-        await channel.permissionOverwrites.edit(unverifiedRole, { ViewChannel: false, SendMessages: false, Connect: false }).catch(() => {});
-        await channel.permissionOverwrites.edit(verifiedRole, { ViewChannel: false, SendMessages: false, Connect: false }).catch(() => {});
+        await withRetry(() => channel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false, SendMessages: false, Connect: false }), `channel ${channel.name} @everyone`);
+        await withRetry(() => channel.permissionOverwrites.edit(unverifiedRole, { ViewChannel: false, SendMessages: false, Connect: false }), `channel ${channel.name} unverified`);
+        await withRetry(() => channel.permissionOverwrites.edit(verifiedRole, { ViewChannel: false, SendMessages: false, Connect: false }), `channel ${channel.name} verified`);
       } else if (channel.type === ChannelType.GuildVoice) {
         const isLockedVC = 
           cName.includes("lock") || cName.includes("private") || cName.includes("vip") || 
@@ -1294,33 +1328,33 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
         if (isManuallyLocked) {
           lockedVCs++;
           // DO NOT touch @everyone permissions - preserve admin locks
-          await channel.permissionOverwrites.edit(unverifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(unverifiedRole, {
             ViewChannel: true,
             Connect: false,
             Speak: false
-          }).catch(() => {});
+          }), `vc ${channel.name} unverified`);
 
-          await channel.permissionOverwrites.edit(verifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(verifiedRole, {
             ViewChannel: true,
             Connect: false,
             Speak: false
-          }).catch(() => {});
+          }), `vc ${channel.name} verified`);
         } else {
           unlockedChannels++;
           // DO NOT touch @everyone permissions - respect admin settings
-          await channel.permissionOverwrites.edit(unverifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(unverifiedRole, {
             ViewChannel: true,
             Connect: true,
             Speak: false
-          }).catch(() => {});
+          }), `vc ${channel.name} unverified`);
 
-          await channel.permissionOverwrites.edit(verifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(verifiedRole, {
             ViewChannel: true,
             Connect: true,
             Speak: true,
             UseVAD: true,
             Stream: true
-          }).catch(() => {});
+          }), `vc ${channel.name} verified`);
         }
       } else {
         unlockedChannels++;
@@ -1333,40 +1367,40 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
           parentName.includes("wall of fame") || parentName.includes("settings") || parentName.includes("rules") || parentName.includes("info");
 
         if (isReadOnlyText) {
-          await channel.permissionOverwrites.edit(guild.roles.everyone, {
+          await withRetry(() => channel.permissionOverwrites.edit(guild.roles.everyone, {
             ViewChannel: true,
             ReadMessageHistory: true,
             SendMessages: false,
             AddReactions: true
-          }).catch(() => {});
+          }), `channel ${channel.name} @everyone`);
 
-          await channel.permissionOverwrites.edit(unverifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(unverifiedRole, {
             ViewChannel: true,
             ReadMessageHistory: true,
             SendMessages: false,
             AddReactions: true
-          }).catch(() => {});
+          }), `channel ${channel.name} unverified`);
 
-          await channel.permissionOverwrites.edit(verifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(verifiedRole, {
             ViewChannel: true,
             ReadMessageHistory: true,
             SendMessages: false,
             AddReactions: true
-          }).catch(() => {});
+          }), `channel ${channel.name} verified`);
         } else {
-          await channel.permissionOverwrites.edit(guild.roles.everyone, {
+          await withRetry(() => channel.permissionOverwrites.edit(guild.roles.everyone, {
             ViewChannel: true,
             ReadMessageHistory: true,
             SendMessages: false
-          }).catch(() => {});
+          }), `channel ${channel.name} @everyone`);
 
-          await channel.permissionOverwrites.edit(unverifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(unverifiedRole, {
             ViewChannel: true,
             ReadMessageHistory: true,
             SendMessages: false
-          }).catch(() => {});
+          }), `channel ${channel.name} unverified`);
 
-          await channel.permissionOverwrites.edit(verifiedRole, {
+          await withRetry(() => channel.permissionOverwrites.edit(verifiedRole, {
             ViewChannel: true,
             ReadMessageHistory: true,
             SendMessages: true,
@@ -1374,7 +1408,7 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
             AttachFiles: true,
             AddReactions: true,
             UseExternalEmojis: true
-          }).catch(() => {});
+          }), `channel ${channel.name} verified`);
         }
       }
     }
@@ -1680,9 +1714,11 @@ client.on("clientReady", async () => {
         try {
             const hasVerifyChannel = guild.channels.cache.some(c => c.name.toLowerCase() === "verify" || c.name.toLowerCase() === "verification");
             if (hasVerifyChannel) {
-                await auditAndApplyVerifiedRolePermissions(guild, verifiedRoleName).catch(() => {});
+                await auditAndApplyVerifiedRolePermissions(guild, verifiedRoleName);
             }
-        } catch (err) {}
+        } catch (err: any) {
+            addBotLog(`🚨 CRITICAL: Failed to enforce verification matrix in '${guild.name}': ${err.message}`, "error");
+        }
     }
 
     // Initialize Invite Cache for all guilds
@@ -3000,10 +3036,10 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
               return;
             }
 
-            await member.roles.add(verifiedRole, "Verification System: User clicked Verify button").catch(() => {});
+            await withRetry(() => member.roles.add(verifiedRole, "Verification System: User clicked Verify button"), "add verified role");
             const unverifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === "unverified");
             if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
-              await member.roles.remove(unverifiedRole, "Verification System: User is now verified").catch(() => {});
+              await withRetry(() => member.roles.remove(unverifiedRole, "Verification System: User is now verified"), "remove unverified role");
             }
             addBotLog(`✅ User ${member.user.tag} completed verification in '${guild.name}'`, "success");
 
@@ -4488,8 +4524,8 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
           // Elevate Verification Level
           await targetGuild.setVerificationLevel(4).catch(() => {});
           
-          // Trigger Emergency Blind Quarantine to strip all dangerous permissions from roles below the bot
-          await emergencyQuarantine(targetGuild).catch(() => {});
+           // Trigger Emergency Blind Quarantine to strip all dangerous permissions from roles below the bot
+           await emergencyQuarantine(targetGuild);
           
           // Initiate Full Channel Lockdown
           await NukeDefense.lockdown(targetGuild).catch(() => {});
@@ -4919,7 +4955,7 @@ const linkRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(discord\.gg\/[a-zA-Z0-9]+)
         await guild.setVerificationLevel(4).catch(() => {});
 
         // Trigger Emergency Blind Quarantine to strip admin/kick permissions from all suspect roles below the bot
-        await emergencyQuarantine(guild).catch(() => {});
+        await emergencyQuarantine(guild);
 
         // Initiate Full Channel Lockdown
         await NukeDefense.lockdown(guild).catch(() => {});
