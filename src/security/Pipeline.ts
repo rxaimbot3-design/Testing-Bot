@@ -64,10 +64,10 @@ export class SecurityPipeline {
   static processEvent(event: SecurityEvent): PipelineResult {
     if (!event.type || !event.userId || !event.guildId) {
       const result: PipelineResult = {
-        blocked: false,
-        action: "monitor",
+        blocked: true,
+        action: "quarantine",
         reason: "Invalid event: missing required fields",
-        score: 25,
+        score: 80,
         rule: "invalid_input",
         canRollback: false
       };
