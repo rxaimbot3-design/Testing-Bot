@@ -5,6 +5,7 @@ import crypto from "crypto";
 import path from "path";
 import { Buffer } from "buffer";
 import { TtlMap, LruMap } from "./security/MapManager.js";
+import { withExponentialBackoff } from "./bot/utils.js";
 
 const AI_QUOTA_WARNING = "AI Quota limit reached in SecurityFeatures.";
 
@@ -589,7 +590,11 @@ export class AIDeepScan {
 
   static async analyzeMessage(messageContent: string, userId: string = "global", channelId: string = "global"): Promise<number> {
     // 0 = Safe, 100 = High Threat (Social Engineering, Raid Planning)
-    if (!process.env.GEMINI_API_KEY || !messageContent) return 0; // Skip if no key
+    if (!messageContent) return 0;
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn("[AI DeepScan] GEMINI_API_KEY missing. Using heuristic fallback.");
+      return AIDeepScan.heuristicFallback(messageContent);
+    }
 
     const now = Date.now();
 
@@ -629,8 +634,13 @@ export class AIDeepScan {
         console.warn(AI_QUOTA_WARNING);
       }
       console.error("AI Scan Error:", error);
-      return 0;
+      return AIDeepScan.heuristicFallback(messageContent);
     }
+  }
+
+  private static heuristicFallback(messageContent: string): number {
+    const hasRaidKeywords = /(raid|nuke|attack|hack|bypass|alt|bot|invite|spam|mass|ban|kick|ping|admin|token|owner|payload|infect|crash)/i.test(messageContent);
+    return hasRaidKeywords ? 40 : 5;
   }
 }
 
@@ -651,17 +661,23 @@ export class Quarantine {
         
         for (const [_, channel] of guild.channels.cache) {
           if (channel.isTextBased() && 'permissionOverwrites' in channel) {
-            await (channel as any).permissionOverwrites.edit(role, {
+            await withExponentialBackoff(() => (channel as any).permissionOverwrites.edit(role, {
               ViewChannel: false,
               SendMessages: false
-            }).catch(() => {});
+            }), 3, 1000).catch((err: any) => {
+              console.error(`🚨 CRITICAL: Discord API failure [quarantine channel ${channel.id}]: ${err.message}`);
+            });
           }
         }
       }
 
       const manageableRoles = member.roles.cache.filter((r: any) => r.id !== guild.id && r.editable);
-      await member.roles.remove(manageableRoles, "Applying Shadow Ban").catch(() => {});
-      await member.roles.add(role, "Ghost Jail Applied").catch(() => {});
+      await withExponentialBackoff(() => member.roles.remove(manageableRoles, "Applying Shadow Ban"), 3, 1000).catch((err: any) => {
+        console.error(`🚨 CRITICAL: Discord API failure [quarantine remove roles]: ${err.message}`);
+      });
+      await withExponentialBackoff(() => member.roles.add(role, "Ghost Jail Applied"), 3, 1000).catch((err: any) => {
+        console.error(`🚨 CRITICAL: Discord API failure [quarantine add role]: ${err.message}`);
+      });
       
       console.log(`☣️ [SILENT JAIL] User ${member.user.tag} has been shadow-banned and isolated.`);
     } catch (err: any) {
@@ -722,7 +738,16 @@ export class SentimentTracker {
       apiKey = process.env.GEMINI_API_KEY;
     }
     
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.warn("[SentimentTracker] GEMINI_API_KEY missing. Applying heuristic fallback.");
+      const currentScore = this.serverScores.get(message.guild.id) || 100;
+      const newScore = isSuspicious ? Math.max(0, currentScore - 10) : currentScore;
+      this.serverScores.set(message.guild.id, newScore);
+      if (isSuspicious) {
+        alertCallback(`⚠️ AI Sentiment analysis unavailable. Suspicious message detected by heuristic.`);
+      }
+      return;
+    }
 
     try {
       const ai = new GoogleGenAI({ apiKey });
@@ -801,6 +826,13 @@ Message: "${message.content}"`;
       const errStr = String(err?.message || err).toLowerCase();
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
         console.warn(AI_QUOTA_WARNING);
+      }
+      console.error("[SentimentTracker] AI analysis failed. Applying heuristic fallback.", err);
+      const currentScore = this.serverScores.get(message.guild.id) || 100;
+      const newScore = isSuspicious ? Math.max(0, currentScore - 10) : currentScore;
+      this.serverScores.set(message.guild.id, newScore);
+      if (isSuspicious) {
+        alertCallback(`⚠️ AI Sentiment analysis unavailable. Suspicious message detected by heuristic.`);
       }
     }
   }
@@ -1480,7 +1512,8 @@ export class IPBanSystem {
         console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error loading IP bans:", err);
-      return [];
+      // Fail-closed: return last known good cache instead of clearing all bans
+      return this.cachedBans || [];
     }
   }
 
@@ -1513,7 +1546,8 @@ export class IPBanSystem {
         console.warn(AI_QUOTA_WARNING);
       }
       console.error("Error loading verified IPs:", err);
-      return [];
+      // Fail-closed: return last known good cache instead of clearing all verified IPs
+      return this.cachedVerified || [];
     }
   }
 

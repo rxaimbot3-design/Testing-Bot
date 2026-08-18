@@ -64,10 +64,10 @@ export class SecurityPipeline {
   static processEvent(event: SecurityEvent): PipelineResult {
     if (!event.type || !event.userId || !event.guildId) {
       const result: PipelineResult = {
-        blocked: false,
-        action: "monitor",
+        blocked: true,
+        action: "quarantine",
         reason: "Invalid event: missing required fields",
-        score: 0,
+        score: 80,
         rule: "invalid_input",
         canRollback: false
       };
@@ -77,6 +77,20 @@ export class SecurityPipeline {
 
     if (typeof event.timestamp !== 'number' || event.timestamp <= 0) {
       event.timestamp = Date.now();
+    }
+
+    // Reject events with timestamps far in the future (>5 min clock skew)
+    if (event.timestamp > Date.now() + 300000) {
+      const result: PipelineResult = {
+        blocked: true,
+        action: "quarantine",
+        reason: "Invalid event: timestamp too far in future",
+        score: 80,
+        rule: "invalid_timestamp",
+        canRollback: false
+      };
+      this.logDecision(event, result);
+      return result;
     }
 
     // Emergency lockdown blocks all non-owner actions
@@ -128,8 +142,16 @@ export class SecurityPipeline {
 
     switch (event.type) {
       case "channel_create":
-        score += this.checkBurst(key, history, now, this.thresholds.massChannelCreate) * 40;
-        if (score > 0) rule = "mass_channel_create";
+        // Primary: payload count
+        if ((event.payload?.channelCount || 0) >= 5) {
+          score += 40;
+          rule = "mass_channel_create";
+        }
+        // Amplification: event velocity
+        if (score === 0) {
+          score += this.checkBurst(key, history, now, this.thresholds.massChannelCreate) * 40;
+          if (score > 0) rule = "mass_channel_create";
+        }
         break;
       case "channel_delete":
         score += this.checkBurst(key, history, now, { count: 3, windowMs: 10000 }) * 40;
@@ -137,12 +159,30 @@ export class SecurityPipeline {
         break;
       case "role_create":
       case "role_update":
-        score += this.checkBurst(key, history, now, this.thresholds.massRoleModify) * 50;
-        if (score > 0) rule = "mass_role_update";
+        // Primary: payload count (matches C++ engine threshold of 3)
+        if ((event.payload?.roleCount || 0) >= 3) {
+          score += 50;
+          rule = "mass_role_update";
+        }
+        // Amplification: event velocity
+        if (score === 0) {
+          score += this.checkBurst(key, history, now, this.thresholds.massRoleModify) * 50;
+          if (score > 0) rule = "mass_role_update";
+        }
         break;
       case "permission_update":
-        score += this.checkBurst(key, history, now, this.thresholds.permissionEscalation) * 40;
-        if (score > 0) rule = "permission_escalation";
+        // Primary: payload-based permission escalation
+        const permsAdded = event.payload?.permsAdded || 0;
+        const permsRemoved = event.payload?.permsRemoved || 0;
+        if (permsAdded > 0 && permsRemoved === 0 && permsAdded >= 50) {
+          score += 40;
+          rule = "permission_escalation";
+        }
+        // Amplification: event velocity
+        if (score === 0) {
+          score += this.checkBurst(key, history, now, this.thresholds.permissionEscalation) * 40;
+          if (score > 0) rule = "permission_escalation";
+        }
         break;
       case "message_bulk_delete":
         score += 30;
@@ -150,17 +190,42 @@ export class SecurityPipeline {
         break;
       case "guild_kick":
       case "guild_ban":
-        score += this.checkBurst(key, history, now, this.thresholds.massBanKick) * 50;
-        if (score > 0) rule = "mass_ban_kick";
+        // Primary: payload count (matches C++ engine behavior)
+        const totalBanKick = (event.payload?.banCount || 0) + (event.payload?.kickCount || 0);
+        if (totalBanKick >= 5) {
+          score += 50;
+          rule = "mass_ban_kick";
+        }
+        // Amplification: event velocity
+        if (score === 0) {
+          score += this.checkBurst(key, history, now, this.thresholds.massBanKick) * 50;
+          if (score > 0) rule = "mass_ban_kick";
+        }
         break;
       case "webhook_create":
       case "webhook_update":
-        score += this.checkBurst(key, history, now, { count: 2, windowMs: 10000 }) * 55;
-        if (score > 0) rule = "webhook_abuse";
+        // Primary: payload count
+        if ((event.payload?.webhookCount || 0) >= 2) {
+          score += 55;
+          rule = "webhook_abuse";
+        }
+        // Amplification: event velocity
+        if (score === 0) {
+          score += this.checkBurst(key, history, now, { count: 2, windowMs: 10000 }) * 55;
+          if (score > 0) rule = "webhook_abuse";
+        }
         break;
       case "guild_member_add":
-        score += this.checkBurst(key, history, now, { count: 5, windowMs: 10000 }) * 40;
-        if (score > 0) rule = "bot_addition";
+        // Primary: payload count
+        if ((event.payload?.botCount || 0) >= 3) {
+          score += 40;
+          rule = "bot_addition";
+        }
+        // Amplification: event velocity
+        if (score === 0) {
+          score += this.checkBurst(key, history, now, { count: 5, windowMs: 10000 }) * 40;
+          if (score > 0) rule = "bot_addition";
+        }
         break;
       default:
         score += this.checkBurst(key, history, now, this.thresholds.burst) * 30;

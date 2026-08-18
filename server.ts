@@ -202,8 +202,24 @@ function checkSessionReplay(token: string): boolean {
   return false;
 }
 
+// Peppered hash for session tokens persisted to disk/Redis.
+// Prevents rainbow table attacks on stolen session files.
+function hashSessionToken(token: string): string {
+  if (!token || typeof token !== "string") return crypto.createHash("sha256").update("").digest("hex");
+  const pepper = process.env.ADMIN_SECRET || "";
+  return crypto.createHash("sha256").update(token + pepper).digest("hex");
+}
+
 // Active Admin Sessions Store (Multi-Instance: Redis is authoritative, local Map is cache)
-const activeAdminSessions = new Map<string, { username: string; createdAt: number; expiresAt: number; tokenHash: string }>();
+interface AdminSession {
+  username: string;
+  createdAt: number;
+  expiresAt: number;
+  tokenHash: string;
+  clientIp: string;
+}
+const activeAdminSessions = new Map<string, AdminSession>();
+const revokedSessionHashes = new Set<string>();
 const SESSIONS_FILE = path.join(process.cwd(), "admin_sessions.json");
 const REDIS_SESSION_PREFIX = "session:admin:";
 
@@ -211,7 +227,7 @@ function getRedisSessionKey(tokenHash: string): string {
   return `${REDIS_SESSION_PREFIX}${tokenHash}`;
 }
 
-async function redisGetSession(tokenHash: string): Promise<{ username: string; createdAt: number; expiresAt: number; tokenHash: string } | null> {
+async function redisGetSession(tokenHash: string): Promise<AdminSession | null> {
   try {
     const client = MongoRedisEngine['redisClient'];
     if (!client || !MongoRedisEngine.isRedisConnected) return null;
@@ -223,7 +239,7 @@ async function redisGetSession(tokenHash: string): Promise<{ username: string; c
   }
 }
 
-async function redisSetSession(tokenHash: string, session: { username: string; createdAt: number; expiresAt: number; tokenHash: string }, ttlSec: number): Promise<void> {
+async function redisSetSession(tokenHash: string, session: AdminSession, ttlSec: number): Promise<void> {
   try {
     const client = MongoRedisEngine['redisClient'];
     if (!client || !MongoRedisEngine.isRedisConnected) return;
@@ -251,6 +267,28 @@ async function syncSessionsToRedis(): Promise<void> {
   }
 }
 
+async function purgeRevokedSessionsFromRedis(): Promise<void> {
+  if (!MongoRedisEngine.isRedisConnected) return;
+  const client = MongoRedisEngine['redisClient'];
+  if (!client) return;
+  try {
+    const keys = await client.keys(`${REDIS_SESSION_PREFIX}*`);
+    for (const key of keys) {
+      const tokenHash = key.replace(REDIS_SESSION_PREFIX, "");
+      if (revokedSessionHashes.has(tokenHash)) {
+        await client.del(key);
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// Periodic cleanup of revoked sessions from Redis (every 2 minutes)
+setInterval(() => {
+  purgeRevokedSessionsFromRedis().catch(() => {});
+}, 2 * 60 * 1000);
+
 async function loadAdminSessions() {
   try {
     if (fs.existsSync(SESSIONS_FILE)) {
@@ -259,7 +297,13 @@ async function loadAdminSessions() {
       if (Array.isArray(data)) {
         for (const item of data) {
           if (item.tokenHash && item.expiresAt > now) {
-            activeAdminSessions.set(item.tokenHash, { username: item.username, createdAt: item.createdAt, expiresAt: item.expiresAt, tokenHash: item.tokenHash });
+            activeAdminSessions.set(item.tokenHash, {
+              username: item.username,
+              createdAt: item.createdAt,
+              expiresAt: item.expiresAt,
+              tokenHash: item.tokenHash,
+              clientIp: item.clientIp || ""
+            });
           }
         }
       }
@@ -274,18 +318,24 @@ async function loadAdminSessions() {
 
 async function saveAdminSessions() {
   try {
-    const list = Array.from(activeAdminSessions.values()).map(sess => ({ tokenHash: sess.tokenHash, username: sess.username, createdAt: sess.createdAt, expiresAt: sess.expiresAt }));
+    const list = Array.from(activeAdminSessions.values()).map(sess => ({
+      tokenHash: sess.tokenHash,
+      username: sess.username,
+      createdAt: sess.createdAt,
+      expiresAt: sess.expiresAt,
+      clientIp: sess.clientIp
+    }));
     atomicWriteJsonSync(SESSIONS_FILE, list);
   } catch (err) {
     console.error("Failed to save admin sessions to disk:", err);
   }
 }
 
-async function createAdminSession(username: string): Promise<{ token: string; expiresAt: number }> {
+async function createAdminSession(username: string, clientIp: string): Promise<{ token: string; expiresAt: number }> {
   const token = "session_" + crypto.randomBytes(32).toString("hex");
-  const tokenHash = hashToken(token);
+  const tokenHash = hashSessionToken(token);
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-  const session = { username, createdAt: Date.now(), expiresAt, tokenHash };
+  const session: AdminSession = { username, createdAt: Date.now(), expiresAt, tokenHash, clientIp: clientIp || "" };
   // Redis is authoritative: write to Redis first, then update local cache
   await redisSetSession(tokenHash, session, 24 * 60 * 60);
   activeAdminSessions.set(tokenHash, session);
@@ -295,7 +345,8 @@ async function createAdminSession(username: string): Promise<{ token: string; ex
 
 async function revokeAdminSessionByToken(token: string) {
   if (!token) return false;
-  const tokenHash = hashToken(token);
+  const tokenHash = hashSessionToken(token);
+  revokedSessionHashes.add(tokenHash);
   const deleted = activeAdminSessions.delete(tokenHash);
   await redisDelSession(tokenHash);
   saveAdminSessions();
@@ -371,11 +422,25 @@ async function requireAdminAuth(req: express.Request, res: express.Response, nex
       return next();
     }
 
-    // Replay protection for session tokens removed to allow parallel dashboard requests.
-    // Session security is maintained via hashed server-side storage and 24h expiry.
+    // Replay protection for session tokens (1s window allows parallel dashboard requests
+    // while blocking automated token replay attacks).
+    const replayTokenHash = hashToken(tokenStr);
+    const now = Date.now();
+    const lastUsed = recentlyUsedTokens.get(replayTokenHash);
+    if (lastUsed && now - lastUsed < 1000) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Session token replay detected." });
+    }
+    recentlyUsedTokens.set(replayTokenHash, now);
+    // Prune old entries
+    for (const [hash, ts] of recentlyUsedTokens.entries()) {
+      if (now - ts > 300000) recentlyUsedTokens.delete(hash);
+    }
 
     // Redis-first session lookup (Redis is authoritative, local Map is cache)
-    const tokenHash = hashToken(tokenStr);
+    const tokenHash = hashSessionToken(tokenStr);
+    if (revokedSessionHashes.has(tokenHash)) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Session token has been revoked." });
+    }
     let session = activeAdminSessions.get(tokenHash);
 
     if (MongoRedisEngine.isRedisConnected) {
@@ -397,6 +462,13 @@ async function requireAdminAuth(req: express.Request, res: express.Response, nex
         await redisDelSession(tokenHash);
         saveAdminSessions();
         return res.status(401).json({ success: false, error: "Unauthorized: Session token has expired." });
+      }
+      // IP binding: reject session usage from a different IP address
+      const currentIp = req.ip || (req.headers["x-forwarded-for"] as string || "127.0.0.1").split(",")[0].trim();
+      const normalizedCurrentIp = currentIp.startsWith("::ffff:") ? currentIp.substring(7) : currentIp;
+      const sessionIp = (session.clientIp || "").startsWith("::ffff:") ? (session.clientIp || "").substring(7) : session.clientIp;
+      if (sessionIp && normalizedCurrentIp !== sessionIp) {
+        return res.status(401).json({ success: false, error: "Unauthorized: Session IP mismatch." });
       }
       return next();
     }
@@ -1001,30 +1073,8 @@ function createZipArchiveBuffer(baseDir: string): Buffer {
 
 // Health Check Endpoint
 
-app.get("/api/download/source", (req, res) => {
+app.get("/api/download/source", requireAdminAuth, (req, res) => {
   try {
-    const authKey = (req.headers["x-admin-key"] || req.headers["authorization"] || "") as string;
-    const cookieToken = req.cookies?.admin_session_token || "";
-    const adminSecret = process.env.ADMIN_SECRET!;
-    
-    let isAuthorized = false;
-    const cleanAuth = authKey.replace(/^Bearer\s+/i, "").trim() || cookieToken;
-
-    if (cleanAuth) {
-       if (cleanAuth.length === adminSecret.length && crypto.timingSafeEqual(Buffer.from(cleanAuth), Buffer.from(adminSecret))) {
-          isAuthorized = true;
-       } else {
-         const tokenHash = hashToken(cleanAuth);
-         if (activeAdminSessions.has(tokenHash)) {
-           isAuthorized = true;
-         }
-       }
-    }
-    
-    if (!isAuthorized) {
-      return res.status(401).json({ error: "Unauthorized: Valid admin authentication key required to download source code archive." });
-    }
-
     logAdminAuditAction("DOWNLOAD_SOURCE_CODE", req);
     const zipBuffer = createZipArchiveBuffer(process.cwd());
     res.attachment('source-code.zip');
@@ -1042,7 +1092,7 @@ app.get("/api/health", (req, res) => {
     api: { status: "up", latencyMs: Date.now() - startTime },
     database: { status: "up" },
     redis: { status: "up" },
-    cppEngine: { status: "up", mode: "native" },
+    cppEngine: { status: "up" },
     discordBot: { status: "up" }
   };
 
@@ -1065,14 +1115,12 @@ app.get("/api/health", (req, res) => {
 
   try {
     const cppMetrics = CppNativeEngine.getMetrics();
-    const engineMode = CppNativeEngine.getEngineMode();
     checks.cppEngine = { 
       status: cppMetrics?.status !== 'OFFLINE' ? 'up' : 'down', 
-      mode: engineMode,
-      nativeLoaded: engineMode === 'native'
+      nativeLoaded: cppMetrics?.engineName?.includes("Native") || false
     };
   } catch {
-    checks.cppEngine = { status: 'down', mode: 'unknown', nativeLoaded: false };
+    checks.cppEngine = { status: 'down', nativeLoaded: false };
   }
 
   try {
@@ -1094,7 +1142,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.get("/api/health/detailed", (req, res) => {
+app.get("/api/health/detailed", requireAdminAuth, (req, res) => {
   const startTime = Date.now();
   const client = getClient();
   const cppMetrics = CppNativeEngine.getMetrics();
@@ -1201,7 +1249,7 @@ app.post("/api/auth/discord/login", RateLimiterMiddleware.limit(60000, 10, "logi
       return res.status(403).json({ success: false, error: "Unauthorized Discord Account. You are not a server owner." });
     }
 
-    const { token: sessionToken, expiresAt } = await createAdminSession(userData.username);
+    const { token: sessionToken, expiresAt } = await createAdminSession(userData.username, req.ip || "");
 
     res.cookie("admin_session_token", sessionToken, {
       httpOnly: true,
@@ -1236,7 +1284,7 @@ app.post("/api/auth/login", RateLimiterMiddleware.limit(60000, 10, "login"), asy
     const secretMatches = inputKey && validSecret && inputKey.length === validSecret.length && crypto.timingSafeEqual(Buffer.from(inputKey), Buffer.from(validSecret));
 
     if (secretMatches) {
-      const { token: sessionToken, expiresAt } = await createAdminSession("Admin");
+      const { token: sessionToken, expiresAt } = await createAdminSession("Admin", clientIp);
 
       res.cookie("admin_session_token", sessionToken, {
         httpOnly: true,
@@ -1277,7 +1325,10 @@ app.get("/api/auth/session", async (req, res) => {
       return res.json({ authenticated: true, username: "Admin", mode: "direct-secret", clientIp });
     }
 
-    const tokenHash = hashToken(tokenStr);
+    const tokenHash = hashSessionToken(tokenStr);
+    if (revokedSessionHashes.has(tokenHash)) {
+      return res.json({ authenticated: false, clientIp });
+    }
     let session = activeAdminSessions.get(tokenHash);
 
     if (!session && MongoRedisEngine.isRedisConnected) {
@@ -2909,7 +2960,18 @@ app.post("/api/github/push", requireAdminAuth, async (req, res) => {
   }
 });
 
-const processedWebhookDeliveries = new Set<string>();
+const processedWebhookDeliveries = new Map<string, number>();
+
+// Periodic cleanup of old webhook delivery IDs (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+  for (const [id, ts] of processedWebhookDeliveries.entries()) {
+    if (now - ts > maxAge) {
+      processedWebhookDeliveries.delete(id);
+    }
+  }
+}, 5 * 60 * 1000);
 
 app.post("/api/github/webhook", async (req, res) => {
   try {
@@ -2944,13 +3006,16 @@ app.post("/api/github/webhook", async (req, res) => {
       return res.status(401).json({ success: false, error: "Unauthorized: Signature verification failed." });
     }
 
+    // Replay protection: reject if delivery ID was already processed
+    const now = Date.now();
     if (processedWebhookDeliveries.has(deliveryId)) {
       return res.status(200).json({ success: true, message: "Duplicate webhook delivery ignored." });
     }
-    processedWebhookDeliveries.add(deliveryId);
+    processedWebhookDeliveries.set(deliveryId, now);
     if (processedWebhookDeliveries.size > 5000) {
-      const arr = Array.from(processedWebhookDeliveries);
-      arr.slice(0, 2500).forEach(id => processedWebhookDeliveries.delete(id));
+      const arr = Array.from(processedWebhookDeliveries.entries());
+      arr.sort((a, b) => a[1] - b[1]);
+      arr.slice(0, 2500).forEach(([id]) => processedWebhookDeliveries.delete(id));
     }
 
     const payload = JSON.parse(payloadBuffer.toString('utf8'));

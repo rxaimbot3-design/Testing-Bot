@@ -58,8 +58,9 @@ describe("Critical Bug Fixes", () => {
         timestamp: 0,
         payload: {}
       });
-      expect(result.blocked).toBe(false);
+      expect(result.blocked).toBe(true);
       expect(result.rule).toBe("invalid_input");
+      expect(result.score).toBeGreaterThanOrEqual(50);
     });
 
     it("should not mutate array during rollbackLast iteration", () => {
