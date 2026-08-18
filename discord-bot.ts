@@ -5822,11 +5822,32 @@ Your Goal: Server secured + Members active + Owner's income increased.`;
       return;
     }
     console.log("[BOT-STARTUP] Attempting Discord bot login...");
+    const loginTimeoutMs = 90000; // 90s timeout for Railway/CI environments
     const loginPromise = client.login(tokenToLogin);
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Login timeout: ready event did not fire within 30s")), 30000)
+      setTimeout(() => reject(new Error("Login timeout: ready event did not fire within 90s")), loginTimeoutMs)
     );
-    await Promise.race([loginPromise, timeoutPromise]);
+    try {
+      await Promise.race([loginPromise, timeoutPromise]);
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes("Login timeout")) {
+        addBotLog(`Discord bot login timed out after ${loginTimeoutMs/1000}s. This may be due to network latency from Railway to Discord Gateway. Retrying...`, "warning");
+        // Retry once after timeout
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        try {
+          const retryPromise = client.login(tokenToLogin);
+          const retryTimeout = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Login timeout: ready event did not fire within 90s on retry")), loginTimeoutMs)
+          );
+          await Promise.race([retryPromise, retryTimeout]);
+        } catch (retryErr: any) {
+          throw new Error(`Discord bot login failed after retry: ${retryErr?.message || retryErr}`);
+        }
+      } else {
+        throw err;
+      }
+    }
     console.log("[BOT-STARTUP] client.login() resolved without throwing");
     isStartingBot = false;
   } catch (err: any) {
