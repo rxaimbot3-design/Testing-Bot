@@ -219,7 +219,7 @@ interface AdminSession {
   clientIp: string;
 }
 const activeAdminSessions = new Map<string, AdminSession>();
-const revokedSessionHashes = new Set<string>();
+const revokedSessionHashes = new Map<string, number>();
 const SESSIONS_FILE = path.join(process.cwd(), "admin_sessions.json");
 const REDIS_SESSION_PREFIX = "session:admin:";
 
@@ -289,6 +289,18 @@ setInterval(() => {
   purgeRevokedSessionsFromRedis().catch(() => {});
 }, 2 * 60 * 1000);
 
+// Periodic cleanup of revoked session hashes (every 10 minutes)
+// Prevents unbounded memory growth from accumulated revoked sessions
+setInterval(() => {
+  const now = Date.now();
+  const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+  for (const [tokenHash, revokedAt] of revokedSessionHashes.entries()) {
+    if (now - revokedAt > maxAge) {
+      revokedSessionHashes.delete(tokenHash);
+    }
+  }
+}, 10 * 60 * 1000);
+
 async function loadAdminSessions() {
   try {
     if (fs.existsSync(SESSIONS_FILE)) {
@@ -346,7 +358,7 @@ async function createAdminSession(username: string, clientIp: string): Promise<{
 async function revokeAdminSessionByToken(token: string) {
   if (!token) return false;
   const tokenHash = hashSessionToken(token);
-  revokedSessionHashes.add(tokenHash);
+  revokedSessionHashes.set(tokenHash, Date.now());
   const deleted = activeAdminSessions.delete(tokenHash);
   await redisDelSession(tokenHash);
   saveAdminSessions();
@@ -357,6 +369,7 @@ async function revokeAllAdminSessions() {
   const keysToDelete: string[] = [];
   for (const tokenHash of activeAdminSessions.keys()) {
     keysToDelete.push(getRedisSessionKey(tokenHash));
+    revokedSessionHashes.set(tokenHash, Date.now());
   }
   activeAdminSessions.clear();
   if (MongoRedisEngine.isRedisConnected && keysToDelete.length > 0) {
@@ -458,6 +471,7 @@ async function requireAdminAuth(req: express.Request, res: express.Response, nex
 
     if (session) {
       if (Date.now() > session.expiresAt) {
+        revokedSessionHashes.set(tokenHash, Date.now());
         activeAdminSessions.delete(tokenHash);
         await redisDelSession(tokenHash);
         saveAdminSessions();
