@@ -847,7 +847,7 @@ export async function punishRogueAdmin(guild: Guild, executorId: string, actionT
             ManageChannels: false,
             ManageRoles: false,
             ManageWebhooks: false
-          }, { reason: `Zero Trust Emergency Lockout: Unauthorized ${actionType}` }).catch((err) => {
+          }, { reason: `Zero Trust Emergency Lockout: Unauthorized ${actionType}` }).catch((err: any) => {
             addBotLog(`⚠️ Could not create permission overwrite for <@${executorId}> on channel ${ch.id}: ${err.message}`, "warning");
           });
         }
@@ -1210,14 +1210,14 @@ export async function auditAndApplyVerifiedRolePermissions(guild: Guild, customR
       if (unverifiedRole) markBotCreatedRole(unverifiedRole.id);
     }
 
-    let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === "verify" || c.name.toLowerCase() === "verification") as TextChannel;
+    let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === "verify" || c.name.toLowerCase() === "verification") as TextChannel | undefined;
     if (!verifyChannel) {
       try {
         verifyChannel = await withRetry(() => guild.channels.create({
           name: "verify",
           type: ChannelType.GuildText,
           reason: "Zero Trust Verification Channel"
-        }), "create verify channel");
+        }), "create verify channel") as TextChannel | undefined;
         if (verifyChannel) markBotCreatedChannel(verifyChannel.id);
       } catch (cErr: any) {
         addBotLog(`🚨 CRITICAL: Failed to create verify channel: ${cErr.message}`, "error");
