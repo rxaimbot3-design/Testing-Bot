@@ -129,17 +129,28 @@ describe("Fuzz: API Endpoints", { retry: 0 }, () => {
 
     const start = Date.now();
     let iterations = 0;
+    let crashCount = 0;
+    let unhandledErrorCount = 0;
     while (Date.now() - start < FUZZ_TIME_MS && iterations < FUZZ_ITERATIONS) {
       const randomBody = {
         [crypto.randomBytes(8).toString("hex")]: crypto.randomBytes(32).toString("hex"),
       };
-      const res = await request(app)
-        .post("/api/auth/login")
-        .send(randomBody);
-      expect(res.status).toBeGreaterThanOrEqual(400);
-      expect(res.status).toBeLessThan(600);
+      try {
+        const res = await request(app)
+          .post("/api/auth/login")
+          .send(randomBody);
+        // Real behavior: malformed login payloads must return 400, never 500
+        expect(res.status).toBe(400);
+        expect(res.body).toHaveProperty("success", false);
+        expect(res.body).toHaveProperty("error");
+      } catch (err: any) {
+        // Unhandled exception / crash
+        unhandledErrorCount++;
+        console.error("Unhandled error during fuzz:", err?.message || err);
+      }
       iterations++;
     }
     expect(iterations).toBeGreaterThan(0);
+    expect(unhandledErrorCount).toBe(0);
   }, 10000);
 });

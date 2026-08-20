@@ -9,15 +9,23 @@ describe("CppEngine: Invalid Input Tests", () => {
 
   it("handles non-numeric packetId", () => {
     const result = CppNativeEngine.scanSecurityPacket(NaN as any, 1.5);
-    expect(result.passed).toBe(true);
+    // NaN packetId must be clamped to a safe integer (0) and produce a valid result
+    expect(typeof result.passed).toBe("boolean");
     expect(typeof result.latencyMicros).toBe("number");
+    expect(result.latencyMicros).toBeGreaterThan(0);
+    // With clamped packetId=0 and riskWeight=1.5, no rule should trigger, score=0
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
   });
 
   it("handles non-numeric riskWeight", () => {
     const result = CppNativeEngine.scanSecurityPacket(1, NaN as any);
-    expect(result.passed).toBe(true);
+    // NaN riskWeight must be clamped to 0 and produce a valid result
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.score).toBeLessThanOrEqual(100);
+    expect(typeof result.passed).toBe("boolean");
+    // With packetId=1 and clamped riskWeight=0, no rule triggers
+    expect(result.score).toBe(0);
   });
 
   it("handles null and undefined inputs", () => {

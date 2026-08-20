@@ -58,12 +58,21 @@ describe("SecurityPipeline: Advanced Attack Scenarios", () => {
       payload: {}
     }));
     
-    SecurityPipeline.processBatch(eventsA);
+    const resultsA = SecurityPipeline.processBatch(eventsA);
     const resultsB = SecurityPipeline.processBatch(eventsB);
     
     // Both should trigger independently
     const flaggedB = resultsB.filter(r => r.rule === "mass_channel_create");
     expect(flaggedB.length).toBeGreaterThanOrEqual(1);
+    
+    // Genuine verification: user A's score must not be inflated by user B's burst
+    const lastScoreA = resultsA[resultsA.length - 1].score;
+    const lastScoreB = resultsB[resultsB.length - 1].score;
+    expect(typeof lastScoreA).toBe("number");
+    expect(typeof lastScoreB).toBe("number");
+    // Both users had identical event patterns in their own guilds,
+    // so their final scores should be comparable (not one inflated by the other)
+    expect(Math.abs(lastScoreA - lastScoreB)).toBeLessThan(50);
   });
 
   it("resets state cleanly between test runs", () => {

@@ -84,7 +84,10 @@ describe("Critical Bug Fixes", () => {
         payload: {}
       };
       const result = SecurityPipeline.processEvent(event);
-      expect(result).toBeDefined();
+      // Invalid timestamp must be clamped to Date.now() and treated as a normal event
+      expect(result.blocked).toBe(false);
+      expect(result.action).toBe("monitor");
+      expect(result.score).toBeLessThan(50);
     });
 
     it("should apply false-positive damping only below threshold", () => {

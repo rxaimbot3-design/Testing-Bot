@@ -121,8 +121,11 @@ describe("Security Pipeline: Independent Stages", () => {
   it("handles invalid/malformed events gracefully", () => {
     const badEvent = { type: "", userId: "", guildId: "", timestamp: NaN, payload: null } as unknown as SecurityEvent;
     const result = SecurityPipeline.processEvent(badEvent);
-    expect(result).toBeDefined();
-    expect(typeof result.blocked).toBe("boolean");
+    // Malformed events must be rejected, not silently accepted
+    expect(result.blocked).toBe(true);
+    expect(result.rule).toBe("invalid_input");
+    expect(result.score).toBeGreaterThanOrEqual(50);
+    expect(typeof result.action).toBe("string");
   });
 
   it("handles concurrent processing without state corruption", async () => {

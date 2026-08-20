@@ -225,28 +225,43 @@ describe("CppEngine: Worker Crash Recovery", () => {
     vi.resetModules();
   });
 
-  it("schedules restart after worker error", async () => {
-    const { Worker } = await import("worker_threads");
-    const mockWorker = {
-      postMessage: vi.fn(),
-      terminate: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn()
-    };
-    vi.spyOn(Worker.prototype, "postMessage").mockImplementation(() => {});
-    
+  it("falls back to sync when worker thread fails to initialize", async () => {
+    // Do not mock Worker - let initialization attempt naturally.
+    // In environments where Worker threads are unavailable, the engine
+    // must fall back to sync mode without throwing.
     await CppNativeEngine.initEngine();
-    const metrics = CppNativeEngine.getMetrics();
-    expect(["ACTIVE_MICROSECOND", "STANDBY", "OFFLINE"]).toContain(metrics.status);
-  });
+    const mode = CppNativeEngine.getEngineMode();
+    expect(["native", "worker", "sync"]).toContain(mode);
 
-  it("falls back to sync after max restart attempts", async () => {
-    const { Worker } = await import("worker_threads");
-    vi.spyOn(Worker.prototype, "postMessage").mockImplementation(() => {});
-    
-    await CppNativeEngine.initEngine();
-    // Even with worker issues, engine should still respond
+    // Scan must still return valid results regardless of mode
     const result = CppNativeEngine.scanSecurityPacket(1, 1.5);
     expect(typeof result.passed).toBe("boolean");
+    expect(typeof result.latencyMicros).toBe("number");
+    expect(typeof result.score).toBe("number");
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(100);
+  });
+
+  it("returns valid results after reset and re-initialization", async () => {
+    await CppNativeEngine.initEngine();
+    const firstResult = CppNativeEngine.scanSecurityPacket(42, 1.0);
+    expect(firstResult.passed).toBe(true);
+
+    CppNativeEngine.reset();
+    await CppNativeEngine.initEngine();
+    const secondResult = CppNativeEngine.scanSecurityPacket(42, 1.0);
+    expect(typeof secondResult.passed).toBe("boolean");
+    expect(typeof secondResult.score).toBe("number");
+    expect(secondResult.score).toBeGreaterThanOrEqual(0);
+    expect(secondResult.score).toBeLessThanOrEqual(100);
+  });
+
+  it("maintains metrics consistency after initialization", async () => {
+    await CppNativeEngine.initEngine();
+    const metrics = CppNativeEngine.getMetrics();
+    expect(metrics).toHaveProperty("engineName");
+    expect(metrics).toHaveProperty("status");
+    expect(metrics).toHaveProperty("totalAuditsProcessed");
+    expect(metrics.totalAuditsProcessed).toBeGreaterThanOrEqual(0);
   });
 });

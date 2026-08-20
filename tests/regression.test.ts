@@ -35,7 +35,16 @@ describe("Regression: Known Bug Fixes", () => {
     ];
     const results = SecurityPipeline.processBatch(events);
     expect(results).toHaveLength(2);
-    expect(results.every((r) => typeof r.score === "number")).toBe(true);
+    // Genuine verification: duplicate events should not produce a higher
+    // score than a single event would. If the second event's score exceeds
+    // the first by more than the burst-amplification delta, the duplicate
+    // is being double-penalized.
+    const firstScore = results[0].score;
+    const secondScore = results[1].score;
+    expect(typeof firstScore).toBe("number");
+    expect(typeof secondScore).toBe("number");
+    // Second duplicate must not spike beyond what burst detection adds
+    expect(secondScore).toBeLessThanOrEqual(firstScore + 30);
   });
 
   it("backup engine handles special characters in labels", () => {

@@ -48,10 +48,10 @@ describe("SecurityFeatures: SecurityPipeline Edge Cases", () => {
       payload: undefined
     } as unknown as SecurityEvent;
     const result = SecurityPipeline.processEvent(event);
-    expect(result).toHaveProperty("score");
-    expect(result).toHaveProperty("rule");
-    expect(result).toHaveProperty("blocked");
-    expect(result).toHaveProperty("action");
+    // Missing payload should be treated as empty object and not block benign events
+    expect(result.blocked).toBe(false);
+    expect(result.action).toBe("monitor");
+    expect(result.score).toBeLessThan(50);
   });
 
   it("handles events with null userId", () => {
@@ -63,7 +63,10 @@ describe("SecurityFeatures: SecurityPipeline Edge Cases", () => {
       payload: {}
     };
     const result = SecurityPipeline.processEvent(event);
-    expect(result).toHaveProperty("score");
+    // null userId is invalid input and must be blocked
+    expect(result.blocked).toBe(true);
+    expect(result.rule).toBe("invalid_input");
+    expect(result.score).toBeGreaterThanOrEqual(50);
   });
 
   it("handles events with null guildId", () => {
@@ -75,7 +78,10 @@ describe("SecurityFeatures: SecurityPipeline Edge Cases", () => {
       payload: {}
     };
     const result = SecurityPipeline.processEvent(event);
-    expect(result).toHaveProperty("score");
+    // null guildId is invalid input and must be blocked
+    expect(result.blocked).toBe(true);
+    expect(result.rule).toBe("invalid_input");
+    expect(result.score).toBeGreaterThanOrEqual(50);
   });
 
   it("clamps invalid timestamps to Date.now()", () => {
@@ -87,7 +93,9 @@ describe("SecurityFeatures: SecurityPipeline Edge Cases", () => {
       payload: {}
     };
     const result = SecurityPipeline.processEvent(event);
-    expect(result.score).toBeGreaterThanOrEqual(0);
-    expect(result.blocked).toBeDefined();
+    // Invalid timestamp should be clamped and treated as a normal recent event
+    expect(result.blocked).toBe(false);
+    expect(result.action).toBe("monitor");
+    expect(result.score).toBeLessThan(50);
   });
 });

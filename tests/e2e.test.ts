@@ -49,10 +49,13 @@ describe("E2E: Discord Bot Connection Flow", () => {
     process.env.NODE_ENV = "test";
     process.env.ADMIN_SECRET = "test_admin_secret_12345678901234567890123456789012";
 
+    const startDiscordBot = vi.fn().mockResolvedValue(undefined);
+    const getDiscordBotStatus = vi.fn(() => ({ status: "offline", logs: [] }));
+
     vi.mock("../discord-bot", () => ({
-      startDiscordBot: vi.fn().mockResolvedValue(undefined),
-      stopDiscordBot: vi.fn().mockResolvedValue(undefined),
-      getDiscordBotStatus: vi.fn(() => ({ status: "offline", logs: [] })),
+      startDiscordBot,
+      stopDiscordBot: vi.fn(),
+      getDiscordBotStatus,
       toggleLockdown: vi.fn(),
       addBotLog: vi.fn(),
       sendGitHubAlert: vi.fn(),
@@ -84,16 +87,19 @@ describe("E2E: Discord Bot Connection Flow", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(startDiscordBot).toHaveBeenCalledTimes(1);
+    expect(res.body).toHaveProperty("message");
+    expect(res.body).toHaveProperty("status");
   });
-});
 
-describe("E2E: Security Event Processing", () => {
-  it("processes a security event through the pipeline", async () => {
+  it("returns 500 when startDiscordBot fails", async () => {
     process.env.NODE_ENV = "test";
     process.env.ADMIN_SECRET = "test_admin_secret_12345678901234567890123456789012";
 
+    const startDiscordBot = vi.fn().mockRejectedValue(new Error("Discord connection timeout"));
+
     vi.mock("../discord-bot", () => ({
-      startDiscordBot: vi.fn(),
+      startDiscordBot,
       stopDiscordBot: vi.fn(),
       getDiscordBotStatus: vi.fn(() => ({ status: "offline", logs: [] })),
       toggleLockdown: vi.fn(),
@@ -121,11 +127,101 @@ describe("E2E: Security Event Processing", () => {
     const app = server.app;
 
     const res = await request(app)
+      .post("/api/discord/connect")
+      .set("Authorization", `Bearer ${process.env.ADMIN_SECRET}`)
+      .send({ token: "MTIzNDU2Nzg5MDEyMzQ1Njc4.Gc1234.abcdefghijklmnopqrstuvwxyz1234567890" });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Discord connection timeout");
+  });
+});
+
+describe("E2E: Security Event Processing", () => {
+  it("processes a security event through the pipeline", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.ADMIN_SECRET = "test_admin_secret_12345678901234567890123456789012";
+
+    const mockStats = { totalEvents: 100, blocked: 50, quarantined: 10, lockdowns: 2 };
+    const runNukeDefenseDrill = vi.fn().mockResolvedValue(mockStats);
+
+    vi.mock("../discord-bot", () => ({
+      startDiscordBot: vi.fn(),
+      stopDiscordBot: vi.fn(),
+      getDiscordBotStatus: vi.fn(() => ({ status: "offline", logs: [] })),
+      toggleLockdown: vi.fn(),
+      addBotLog: vi.fn(),
+      sendGitHubAlert: vi.fn(),
+      getSecurityStats: vi.fn(() => ({ blockedAttacksCount: 0, quarantinedUsers: 0, backupCount: 0, ipBansCount: 0, verifiedIpsCount: 0, securityScore: 100, panicLockdownActive: false })),
+      runNukeDefenseDrill,
+      triggerHoneypotTrap: vi.fn(),
+      getClient: vi.fn(() => null),
+    }));
+
+    vi.mock("../src/SecurityFeatures", async () => {
+      const actual: any = await vi.importActual("../src/SecurityFeatures");
+      return {
+        ...actual,
+        MongoRedisEngine: {
+          ...actual.MongoRedisEngine,
+          initRedis: vi.fn().mockResolvedValue(undefined),
+        },
+      };
+    });
+
+    vi.resetModules();
+    const server = await import("../server.js");
+    const app = server.app;
+
+    const res = await request(app)
       .post("/api/bot/simulate-100-nukers")
       .set("Authorization", `Bearer ${process.env.ADMIN_SECRET}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(runNukeDefenseDrill).toHaveBeenCalledTimes(1);
+    expect(res.body.stats).toEqual(mockStats);
+  });
+
+  it("returns 500 when runNukeDefenseDrill fails", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.ADMIN_SECRET = "test_admin_secret_12345678901234567890123456789012";
+
+    const runNukeDefenseDrill = vi.fn().mockRejectedValue(new Error("Drill execution failed"));
+
+    vi.mock("../discord-bot", () => ({
+      startDiscordBot: vi.fn(),
+      stopDiscordBot: vi.fn(),
+      getDiscordBotStatus: vi.fn(() => ({ status: "offline", logs: [] })),
+      toggleLockdown: vi.fn(),
+      addBotLog: vi.fn(),
+      sendGitHubAlert: vi.fn(),
+      getSecurityStats: vi.fn(() => ({ blockedAttacksCount: 0, quarantinedUsers: 0, backupCount: 0, ipBansCount: 0, verifiedIpsCount: 0, securityScore: 100, panicLockdownActive: false })),
+      runNukeDefenseDrill,
+      triggerHoneypotTrap: vi.fn(),
+      getClient: vi.fn(() => null),
+    }));
+
+    vi.mock("../src/SecurityFeatures", async () => {
+      const actual: any = await vi.importActual("../src/SecurityFeatures");
+      return {
+        ...actual,
+        MongoRedisEngine: {
+          ...actual.MongoRedisEngine,
+          initRedis: vi.fn().mockResolvedValue(undefined),
+        },
+      };
+    });
+
+    vi.resetModules();
+    const server = await import("../server.js");
+    const app = server.app;
+
+    const res = await request(app)
+      .post("/api/bot/simulate-100-nukers")
+      .set("Authorization", `Bearer ${process.env.ADMIN_SECRET}`);
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Internal server error");
   });
 });
 
