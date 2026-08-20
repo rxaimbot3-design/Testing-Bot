@@ -286,6 +286,10 @@ export class SecurityPipeline {
       const record = this.decisionLog[i];
       if (record.event.userId === userId && record.event.guildId === guildId && record.result.canRollback) {
         this.decisionLog.splice(i, 1);
+        // Clear quarantine damping if rolling back a quarantine/lockdown decision
+        if (record.result.action === "quarantine" || record.result.action === "lockdown") {
+          this.recentQuarantines.delete(userId);
+        }
         return { ...record.result, action: "rollback", reason: `Rolled back: ${record.result.reason}` };
       }
     }

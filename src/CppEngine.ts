@@ -510,6 +510,7 @@ class SyncEngine {
       };
       const pipelineResult = SecurityPipeline.processEvent(pipelineEvent);
       const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
+      this.auditCounter++;
       return {
         passed: !pipelineResult.blocked,
         latencyMicros,
@@ -518,6 +519,7 @@ class SyncEngine {
     } catch {
       const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
       // Fail-closed: block packet when security pipeline errors
+      this.auditCounter++;
       return { passed: false, latencyMicros, score: 100 };
     }
   }
@@ -560,6 +562,8 @@ tryLoadNativeModule();
 export class CppNativeEngine {
   private static initialized = false;
   private static engineMode: "native" | "worker" | "sync" = "sync";
+  private static totalAuditsProcessed = 0;
+  private static metricsStartTime = Date.now();
 
   static getEngineMode(): "native" | "worker" | "sync" {
     return this.engineMode;
@@ -568,6 +572,8 @@ export class CppNativeEngine {
   static reset(): void {
     this.initialized = false;
     this.engineMode = "sync";
+    this.totalAuditsProcessed = 0;
+    this.metricsStartTime = Date.now();
     workerEngine.reset();
     syncEngine.resetMetrics();
     nativeInstance = null;
@@ -597,6 +603,7 @@ export class CppNativeEngine {
       this.engineMode = "native";
       console.log("⚡ [ENGINE] Initialized with Native C++ (N-API) module.");
       this.initialized = true;
+      this.metricsStartTime = Date.now();
       return;
     }
 
@@ -611,32 +618,38 @@ export class CppNativeEngine {
     }
 
     this.initialized = true;
+    this.metricsStartTime = Date.now();
   }
 
   static scanSecurityPacket(packetId: number, riskWeight: number): { passed: boolean; latencyMicros: number; score: number } {
+    this.totalAuditsProcessed++;
     const safePacketId = Number.isFinite(packetId) ? Math.floor(packetId) : 0;
     const safeRiskWeight = Number.isFinite(riskWeight) ? Math.max(0, Math.min(1000, riskWeight)) : 0;
-    const startTime = process.hrtime.bigint();
 
-    try {
-      const pipelineEvent: SecurityEvent = {
-        type: SyncEngine.mapRiskWeightToEventType(safeRiskWeight),
-        userId: String(safePacketId),
-        guildId: "default",
-        timestamp: Date.now(),
-        payload: { riskWeight: safeRiskWeight, packetId: safePacketId }
-      };
-      const pipelineResult = SecurityPipeline.processEvent(pipelineEvent);
-      const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
-      return {
-        passed: !pipelineResult.blocked,
-        latencyMicros,
-        score: pipelineResult.score
-      };
-    } catch (err) {
-      const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
-      return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
+    if (this.engineMode === "native" && nativeInstance) {
+      const startTime = process.hrtime.bigint();
+      try {
+        const pipelineEvent: SecurityEvent = {
+          type: SyncEngine.mapRiskWeightToEventType(safeRiskWeight),
+          userId: String(safePacketId),
+          guildId: "default",
+          timestamp: Date.now(),
+          payload: { riskWeight: safeRiskWeight, packetId: safePacketId }
+        };
+        const pipelineResult = SecurityPipeline.processEvent(pipelineEvent);
+        const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
+        return {
+          passed: !pipelineResult.blocked,
+          latencyMicros,
+          score: pipelineResult.score
+        };
+      } catch (err) {
+        const latencyMicros = Math.max(1, Math.round(Number(process.hrtime.bigint() - startTime) / 1000));
+        return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
+      }
     }
+
+    return syncEngine.scanSecurityPacket(safePacketId, safeRiskWeight);
   }
 
   static async batchScanPackets(requests: ScanRequest[]): Promise<Array<{ passed: boolean; latencyMicros: number; score: number }>> {
@@ -681,6 +694,8 @@ export class CppNativeEngine {
   }
 
   static resetMetrics() {
+    this.totalAuditsProcessed = 0;
+    this.metricsStartTime = Date.now();
     syncEngine.resetMetrics();
     workerEngine.resetMetrics().catch(() => {});
     if (nativeInstance) {
@@ -691,18 +706,19 @@ export class CppNativeEngine {
   static getMetrics(): CppEngineMetrics {
     if (this.engineMode === "native" && nativeInstance) {
       try {
-        const m = nativeInstance.getMetrics();
+        const elapsedSec = Math.max(1, (Date.now() - this.metricsStartTime) / 1000);
+        const throughput = Math.round(this.totalAuditsProcessed / elapsedSec);
         return {
-          engineName: String(m.engineName || 'C++ Native Security Core'),
-          architecture: String(m.architecture || 'Native'),
-          status: String(m.status || 'ACTIVE_MICROSECOND') as any,
-          memoryAllocatedBytes: typeof m.memoryAllocatedBytes === 'number' ? m.memoryAllocatedBytes : Number(m.memoryAllocatedBytes || 0),
-          memoryUsedMB: typeof m.memoryUsedMB === 'number' ? m.memoryUsedMB : Number(m.memoryUsedMB || 0),
-          averageLatencyMicroseconds: typeof m.averageLatencyMicroseconds === 'number' ? m.averageLatencyMicroseconds : Number(m.averageLatencyMicroseconds || 12),
-          throughputPerSecond: typeof m.throughputPerSecond === 'number' ? m.throughputPerSecond : Number(m.throughputPerSecond || 0),
-          simdAcceleration: Boolean(m.simdAcceleration),
-          activeThreads: typeof m.activeThreads === 'number' ? m.activeThreads : Number(m.activeThreads || 1),
-          totalAuditsProcessed: typeof m.totalAuditsProcessed === 'number' ? m.totalAuditsProcessed : Number(m.totalAuditsProcessed || 0)
+          engineName: String(nativeInstance.getMetrics().engineName || 'C++ Native Security Core'),
+          architecture: String(nativeInstance.getMetrics().architecture || 'Native'),
+          status: String(nativeInstance.getMetrics().status || 'ACTIVE_MICROSECOND') as any,
+          memoryAllocatedBytes: typeof nativeInstance.getMetrics().memoryAllocatedBytes === 'number' ? nativeInstance.getMetrics().memoryAllocatedBytes : Number(nativeInstance.getMetrics().memoryAllocatedBytes || 0),
+          memoryUsedMB: typeof nativeInstance.getMetrics().memoryUsedMB === 'number' ? nativeInstance.getMetrics().memoryUsedMB : Number(nativeInstance.getMetrics().memoryUsedMB || 0),
+          averageLatencyMicroseconds: typeof nativeInstance.getMetrics().averageLatencyMicroseconds === 'number' ? nativeInstance.getMetrics().averageLatencyMicroseconds : Number(nativeInstance.getMetrics().averageLatencyMicroseconds || 12),
+          throughputPerSecond: throughput,
+          simdAcceleration: Boolean(nativeInstance.getMetrics().simdAcceleration),
+          activeThreads: typeof nativeInstance.getMetrics().activeThreads === 'number' ? nativeInstance.getMetrics().activeThreads : Number(nativeInstance.getMetrics().activeThreads || 1),
+          totalAuditsProcessed: this.totalAuditsProcessed
         };
       } catch {
         // fallback

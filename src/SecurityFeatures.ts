@@ -192,8 +192,11 @@ export class TokenVault {
       if (errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("429") || errStr.includes("exceeded")) {
         console.warn(AI_QUOTA_WARNING);
       }
-      this.triggerSelfDestruct("Memory decryption failed - Possible memory tampering.");
-      return "";
+      // Only self-destruct on explicit compromise signals, not normal decryption failures
+      if (errStr.includes("tamper") || errStr.includes("compromise") || errStr.includes("breach") || errStr.includes("memory")) {
+        this.triggerSelfDestruct("Memory decryption failed - Possible memory tampering.");
+      }
+      throw new Error(`Decryption failed: ${(err as Error).message}`);
     }
   }
 

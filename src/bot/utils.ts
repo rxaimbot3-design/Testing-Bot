@@ -32,7 +32,6 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 10
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(fallbackMessage)), timeoutMs);
   });
-  promise.catch(() => {});
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 

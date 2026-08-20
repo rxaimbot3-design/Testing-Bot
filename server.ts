@@ -55,7 +55,23 @@ if (!process.env.ADMIN_SECRET || process.env.ADMIN_SECRET.trim().length < 32) {
   process.exit(1);
 }
 
-validateEnvironmentVariables();
+// In test environments (vitest/jest), skip strict env validation so tests can import modules
+// without requiring every production secret to be present.
+const isTestEnv = process.env.VITEST === 'true' || process.env.JEST_WORKER_ID !== undefined;
+if (!isTestEnv) {
+  try {
+    validateEnvironmentVariables();
+  } catch (err) {
+    console.error("Environment validation failed:", (err as Error).message);
+    process.exit(1);
+  }
+} else {
+  try {
+    validateEnvironmentVariables();
+  } catch {
+    // Swallow validation errors in test mode
+  }
+}
 CanaryToken.setup();
 AdminWhitelistSystem.loadWhitelist();
 console.log("🛡️ [WHITELIST SYSTEM] Admin Whitelist System initialized and active.");
@@ -611,8 +627,12 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,
 }));
-const allowedOrigin = process.env.ALLOWED_ORIGIN || process.env.APP_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : false);
-app.use(cors({ origin: allowedOrigin, credentials: true }));
+const allowedOrigin = process.env.ALLOWED_ORIGIN || process.env.APP_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : undefined);
+if (allowedOrigin) {
+  app.use(cors({ origin: allowedOrigin, credentials: true }));
+} else {
+  app.use(cors({ origin: false, credentials: false }));
+}
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -975,7 +995,11 @@ function calculateCrc32(buf: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function createZipArchiveBuffer(baseDir: string): Buffer {
+export function createZipArchiveBuffer(baseDir: string): Buffer {
+  if (!fs.existsSync(baseDir) || !fs.statSync(baseDir).isDirectory()) {
+    throw new Error(`Base directory does not exist: ${baseDir}`);
+  }
+
   const files: { relPath: string; absPath: string }[] = [];
 
   function walk(dir: string) {
