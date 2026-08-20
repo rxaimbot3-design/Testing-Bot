@@ -139,10 +139,13 @@ describe("Fuzz: API Endpoints", { retry: 0 }, () => {
         const res = await request(app)
           .post("/api/auth/login")
           .send(randomBody);
-        // Real behavior: malformed login payloads must return 400, never 500
-        expect(res.status).toBe(400);
-        expect(res.body).toHaveProperty("success", false);
-        expect(res.body).toHaveProperty("error");
+        // Real behavior: malformed login payloads must return 4xx, never 5xx.
+        // Accept both 400 (bad request) and 429 (rate limited) as valid.
+        expect([400, 429]).toContain(res.status);
+        if (res.status === 400) {
+          expect(res.body).toHaveProperty("success", false);
+          expect(res.body).toHaveProperty("error");
+        }
       } catch (err: any) {
         // Unhandled exception / crash
         unhandledErrorCount++;

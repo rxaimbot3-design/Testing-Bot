@@ -543,5 +543,196 @@
       "authMode": "admin-secret"
     },
     "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:15.419Z",
+    "action": "DISCORD_CONNECT",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {},
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:15.504Z",
+    "action": "DISCORD_CONNECT",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {},
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:15.538Z",
+    "action": "SIMULATE_100_NUKERS_DRILL",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {},
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:15.625Z",
+    "action": "SIMULATE_100_NUKERS_DRILL",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {},
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:15.660Z",
+    "action": "BACKUP_INTEGRITY_TEST",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "passed": true
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:15.770Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:15.778Z",
+    "action": "ADMIN_LOGOUT",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {},
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:19.990Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.220Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.532Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.544Z",
+    "action": "ADMIN_LOGOUT",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {},
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.829Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.832Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.835Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.838Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.840Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.842Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.844Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.846Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.848Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
+  },
+  {
+    "timestamp": "2026-08-20T15:29:21.849Z",
+    "action": "ADMIN_LOGIN",
+    "actorIp": "::ffff:127.0.0.1",
+    "details": {
+      "username": "Admin",
+      "authMode": "admin-secret"
+    },
+    "source": "admin_api"
   }
 ]
