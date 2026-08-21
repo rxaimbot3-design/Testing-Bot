@@ -89,7 +89,7 @@ describe("SecurityPipeline: Advanced Attack Scenarios", () => {
     SecurityPipeline.reset();
     
     // After reset, trusted users should be cleared
-    SecurityPipeline.addTrustedUser("trusted_1");
+    SecurityPipeline.addTrustedUser("trusted_1", "guild_1");
     const result = SecurityPipeline.processEvent({
       type: "channel_delete",
       userId: "trusted_1",
@@ -147,7 +147,7 @@ describe("SecurityPipeline: Advanced Attack Scenarios", () => {
     expect(score1).toBeGreaterThanOrEqual(40);
     
     // User gets quarantined
-    (SecurityPipeline as any).recentQuarantines.set("nuker_1", now);
+    (SecurityPipeline as any).recentQuarantines.set("guild_1:nuker_1", now);
     
     // Second batch - score should be dampened
     const events2 = Array.from({ length: 5 }, (_, i) => ({

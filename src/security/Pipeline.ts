@@ -49,16 +49,16 @@ export class SecurityPipeline {
     return this.lockdownMode;
   }
 
-  static addTrustedUser(userId: string): void {
-    this.trustedUsers.set(userId, true);
+  static addTrustedUser(userId: string, guildId: string): void {
+    this.trustedUsers.set(`${guildId}:${userId}`, true);
   }
 
-  static removeTrustedUser(userId: string): void {
-    this.trustedUsers.delete(userId);
+  static removeTrustedUser(userId: string, guildId: string): void {
+    this.trustedUsers.delete(`${guildId}:${userId}`);
   }
 
-  static isTrusted(userId: string): boolean {
-    return this.trustedUsers.has(userId);
+  static isTrusted(userId: string, guildId: string): boolean {
+    return this.trustedUsers.has(`${guildId}:${userId}`);
   }
 
   static processEvent(event: SecurityEvent): PipelineResult {
@@ -94,7 +94,7 @@ export class SecurityPipeline {
     }
 
     // Emergency lockdown blocks all non-owner actions
-    if (this.lockdownMode && !this.isTrusted(event.userId)) {
+    if (this.lockdownMode && !this.isTrusted(event.userId, event.guildId)) {
       const result: PipelineResult = {
         blocked: true,
         action: "lockdown",
@@ -110,9 +110,9 @@ export class SecurityPipeline {
     const now = event.timestamp || Date.now();
     const { score, rule } = this.evaluateEvent(event, now);
 
-    const action = this.decideAction(score);
+    const adjustedScore = this.adjustForFalsePositive(event.guildId, event.userId, score);
 
-    const adjustedScore = this.adjustForFalsePositive(event.userId, score);
+    const action = this.decideAction(adjustedScore);
 
     const result: PipelineResult = {
       blocked: adjustedScore >= 50,
@@ -125,7 +125,7 @@ export class SecurityPipeline {
 
     // Track quarantine for future false-positive damping
     if (result.action === "quarantine" || result.action === "lockdown") {
-      this.recentQuarantines.set(event.userId, Date.now());
+      this.recentQuarantines.set(`${event.guildId}:${event.userId}`, Date.now());
     }
 
     this.logDecision(event, result);
@@ -250,8 +250,9 @@ export class SecurityPipeline {
     return recent >= threshold.count ? 1 : 0;
   }
 
-  private static adjustForFalsePositive(userId: string, score: number): number {
-    if (this.recentQuarantines.has(userId) && score < 50) {
+  private static adjustForFalsePositive(guildId: string, userId: string, score: number): number {
+    const key = `${guildId}:${userId}`;
+    if (this.recentQuarantines.has(key) && score < 50) {
       return Math.max(0, score - 10);
     }
     return score;
@@ -288,7 +289,7 @@ export class SecurityPipeline {
         this.decisionLog.splice(i, 1);
         // Clear quarantine damping if rolling back a quarantine/lockdown decision
         if (record.result.action === "quarantine" || record.result.action === "lockdown") {
-          this.recentQuarantines.delete(userId);
+          this.recentQuarantines.delete(`${guildId}:${userId}`);
         }
         return { ...record.result, action: "rollback", reason: `Rolled back: ${record.result.reason}` };
       }

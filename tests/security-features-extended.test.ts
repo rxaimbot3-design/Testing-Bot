@@ -165,7 +165,7 @@ describe("SecurityFeatures: SecurityPipeline Integration", () => {
   });
 
   it("reduces score for trusted users but does not completely bypass", () => {
-    SecurityPipeline.addTrustedUser("trusted_1");
+    SecurityPipeline.addTrustedUser("trusted_1", "guild_1");
     const now = Date.now();
     const events = Array.from({ length: 5 }, (_, i) => ({
       type: "channel_delete" as const,

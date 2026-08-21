@@ -154,7 +154,7 @@ describe("Regression: Production Bug Fixes", () => {
       expect(rollback?.action).toBe("rollback");
 
       // After rollback, quarantine damping should be cleared
-      expect((SecurityPipeline as any).recentQuarantines.has("nuker_1")).toBe(false);
+      expect((SecurityPipeline as any).recentQuarantines.has("guild_1:nuker_1")).toBe(false);
     });
 
     it("clears recentQuarantines when rolling back a lockdown decision", () => {
@@ -173,7 +173,86 @@ describe("Regression: Production Bug Fixes", () => {
       expect(rollback).not.toBeNull();
       expect(rollback?.action).toBe("rollback");
       // Quarantine should be cleared because lockdown was rolled back
-      expect((SecurityPipeline as any).recentQuarantines.has("random_user")).toBe(false);
+      expect((SecurityPipeline as any).recentQuarantines.has("guild_1:random_user")).toBe(false);
+    });
+
+    it("Pipeline: action is derived from adjusted score, not raw score", () => {
+      // Raw score from evaluateEvent will be 55 (5 channel_create events with channelCount:5)
+      // but after false-positive damping (if recently quarantined), adjustedScore drops to 45
+      // The action must reflect the adjusted score, not the raw score
+      const events: SecurityEvent[] = Array.from({ length: 5 }, (_, i) => ({
+        type: "channel_create",
+        userId: "damping_user",
+        guildId: "guild_damping",
+        timestamp: Date.now() + i * 100,
+        payload: { channelCount: 5 },
+      }));
+      // First batch triggers quarantine and populates recentQuarantines
+      SecurityPipeline.processBatch(events);
+      // Second batch with same pattern but after quarantine should be dampened
+      const secondBatch: SecurityEvent[] = Array.from({ length: 5 }, (_, i) => ({
+        type: "channel_create",
+        userId: "damping_user",
+        guildId: "guild_damping",
+        timestamp: Date.now() + 20000 + i * 100,
+        payload: { channelCount: 5 },
+      }));
+      const results = SecurityPipeline.processBatch(secondBatch);
+      const lastResult = results[results.length - 1];
+      // If raw score was 55 but damping brings it to 45, action must be "monitor" (not "quarantine")
+      expect(lastResult.action).toBe("monitor");
+      expect(lastResult.blocked).toBe(false);
+      expect(lastResult.score).toBeLessThan(50);
+    });
+
+    it("Trusted users are guild-scoped: trusted in A does not imply trusted in B", () => {
+      SecurityPipeline.addTrustedUser("cross_user", "guild_A");
+      const eventInA: SecurityEvent = {
+        type: "role_update",
+        userId: "cross_user",
+        guildId: "guild_A",
+        timestamp: Date.now(),
+        payload: { roleCount: 3 },
+      };
+      const resultInA = SecurityPipeline.processEvent(eventInA);
+      expect(resultInA.action).not.toBe("lockdown");
+
+      const eventInB: SecurityEvent = {
+        type: "role_update",
+        userId: "cross_user",
+        guildId: "guild_B",
+        timestamp: Date.now(),
+        payload: { roleCount: 3 },
+      };
+      const resultInB = SecurityPipeline.processEvent(eventInB);
+      // In guild B, the user is NOT trusted, so quarantine should apply (score 50)
+      expect(resultInB.action).toBe("quarantine");
+    });
+
+    it("recentQuarantines is guild-scoped: quarantine in A does not dampen B", () => {
+      // Trigger quarantine in guild A
+      const eventsA: SecurityEvent[] = Array.from({ length: 5 }, (_, i) => ({
+        type: "role_update",
+        userId: "dampen_user",
+        guildId: "guild_A",
+        timestamp: Date.now() + i * 100,
+        payload: { roleCount: 3 },
+      }));
+      SecurityPipeline.processBatch(eventsA);
+
+      // Same user in guild B should NOT be dampened
+      const eventsB: SecurityEvent[] = Array.from({ length: 5 }, (_, i) => ({
+        type: "role_update",
+        userId: "dampen_user",
+        guildId: "guild_B",
+        timestamp: Date.now() + i * 100,
+        payload: { roleCount: 3 },
+      }));
+      const resultsB = SecurityPipeline.processBatch(eventsB);
+      const lastB = resultsB[resultsB.length - 1];
+      // Should still be blocked/quarantined, not dampened to monitor
+      expect(lastB.action).toBe("quarantine");
+      expect(lastB.blocked).toBe(true);
     });
   });
 });

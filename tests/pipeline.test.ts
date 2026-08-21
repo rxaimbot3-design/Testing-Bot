@@ -81,7 +81,7 @@ describe("Security Pipeline: Independent Stages", () => {
   });
 
   it("allows trusted users regardless of activity", () => {
-    SecurityPipeline.addTrustedUser("trusted_user");
+    SecurityPipeline.addTrustedUser("trusted_user", "guild_5");
     const now = Date.now();
     const events: SecurityEvent[] = Array.from({ length: 20 }, (_, i) => ({
       type: "channel_create",
@@ -90,7 +90,7 @@ describe("Security Pipeline: Independent Stages", () => {
       timestamp: now + i * 100,
       payload: {},
     }));
-    SecurityPipeline.addTrustedUser("trusted_user");
+    SecurityPipeline.addTrustedUser("trusted_user", "guild_5");
     const results = SecurityPipeline.processBatch(events);
     results.forEach((r) => {
       expect(r.blocked).toBe(false);
@@ -290,7 +290,7 @@ describe("Security Pipeline: Attack Simulations", () => {
   });
 
   it("allows trusted users during raid simulation", () => {
-    SecurityPipeline.addTrustedUser("trusted_admin");
+    SecurityPipeline.addTrustedUser("trusted_admin", "guild_7");
     const now = Date.now();
     const events = Array.from({ length: 20 }, (_, i) => ({
       type: "channel_delete" as const,

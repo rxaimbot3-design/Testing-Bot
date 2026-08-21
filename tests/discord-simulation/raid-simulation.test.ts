@@ -40,7 +40,7 @@ describe("Discord Attack Simulations", () => {
     });
 
     it("allows normal channel deletion by trusted user", () => {
-      SecurityPipeline.addTrustedUser("trusted_admin");
+      SecurityPipeline.addTrustedUser("trusted_admin", "guild_1");
       const event = {
         type: "channel_delete" as const,
         userId: "trusted_admin",

@@ -38,7 +38,7 @@ describe("Critical Bug Fixes", () => {
     });
 
     it("should not allow trusted users to bypass all security completely", () => {
-      SecurityPipeline.addTrustedUser("trusted_user");
+      SecurityPipeline.addTrustedUser("trusted_user", "guild1");
       const event: SecurityEvent = {
         type: "permission_update",
         userId: "trusted_user",

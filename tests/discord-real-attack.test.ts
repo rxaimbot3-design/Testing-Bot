@@ -130,7 +130,7 @@ describe("Real Discord Attack Simulations", () => {
     const now = Date.now();
     // Trusted users bypass lockdown but do not get reduced scores for normal events
     SecurityPipeline.setLockdownMode(true);
-    SecurityPipeline.addTrustedUser("admin_1");
+    SecurityPipeline.addTrustedUser("admin_1", "guild_1");
     
     const trustedResult = SecurityPipeline.processEvent({
       type: "channel_create",
