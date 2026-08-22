@@ -13,14 +13,16 @@ import {
   PiggyBank
 } from 'lucide-react';
 import { LeaderboardUser } from '../types';
+import { apiFetch } from '../services/apiClient';
 
 interface EconomyTabProps {
   leaderboard: LeaderboardUser[];
-  onAddLog: (action: string, severity: 'low' | 'medium' | 'high') => void;
+  onAddLog: (action: string, severity?: 'low' | 'medium' | 'high') => void;
 }
 
 export default function EconomyTab({ leaderboard, onAddLog }: EconomyTabProps) {
   const [users, setUsers] = useState<LeaderboardUser[]>(leaderboard);
+  const [loading, setLoading] = useState(true);
   const [myCoins, setMyCoins] = useState(450);
   const [bankBalance, setBankBalance] = useState(1200);
   const [dailyClaimed, setDailyClaimed] = useState(false);
@@ -71,10 +73,36 @@ export default function EconomyTab({ leaderboard, onAddLog }: EconomyTabProps) {
     }, 4000);
   };
 
+  // Fetch leaderboard from API
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchLeaderboard = async () => {
+      try {
+        const res = await apiFetch('/api/economy/leaderboard');
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && data.leaderboard) {
+            setUsers(data.leaderboard);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to fetch leaderboard:", e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    fetchLeaderboard();
+    return () => { mounted = false; };
+  }, []);
+
   return (
     <div className="space-y-6" id="economy-tab-container">
       {/* Economy Overview Hub */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="economy-hub-grid">
+        <div className="lg:col-span-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+          <p className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Demo Economy System</p>
+          <p className="text-[10px] text-amber-200/80 mt-1">Leaderboard data is simulated for demonstration purposes. No persistent economy database is attached.</p>
+        </div>
         {/* Wallet & Daily Claim Widget */}
         <div className="bg-[#121212] rounded-xl p-5 border border-zinc-800/80 flex flex-col justify-between shadow-xs">
           <div>
@@ -206,52 +234,57 @@ export default function EconomyTab({ leaderboard, onAddLog }: EconomyTabProps) {
             <Trophy className="w-5 h-5 text-amber-500" />
             <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">🏆 Server Leveling & Economy Leaderboard</h3>
           </div>
-          <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Weekly Refreshed</span>
+          <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Demo Data</span>
         </div>
 
         <div className="space-y-2">
-          {users
-            .sort((a, b) => b.xp - a.xp)
-            .map((user, idx) => (
-              <div 
-                key={idx} 
-                className={`flex items-center justify-between p-3 rounded-xl border ${
-                  user.username === 'rxaimbot3' 
-                    ? 'bg-indigo-50/50 border-indigo-200/60' 
-                    : 'bg-[#18181b]/50 border-zinc-800/40'
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                    idx === 0 ? 'bg-amber-500 text-white' :
-                    idx === 1 ? 'bg-zinc-300 text-zinc-200' :
-                    idx === 2 ? 'bg-amber-600 text-white' : 'text-zinc-500 bg-[#27272a]'
-                  }`}>
-                    {idx + 1}
-                  </span>
-                  <div>
-                    <span className="text-xs font-black text-zinc-100">{user.username}</span>
-                    <span className="text-[10px] text-zinc-400 block font-bold uppercase">Rank {idx + 1} Member</span>
+          {loading ? (
+            <div className="text-center py-8 text-xs text-zinc-400 font-bold">Loading leaderboard data...</div>
+          ) : users.length === 0 ? (
+            <div className="text-center py-8 text-xs text-zinc-500">No leaderboard data available yet.</div>
+          ) : (
+            users
+              .sort((a, b) => b.xp - a.xp)
+              .map((user, idx) => (
+                <div 
+                  key={idx} 
+                  className={`flex items-center justify-between p-3 rounded-xl border ${
+                    user.username === 'rxaimbot3' 
+                      ? 'bg-indigo-50/50 border-indigo-200/60' 
+                      : 'bg-[#18181b]/50 border-zinc-800/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+                      idx === 0 ? 'bg-amber-500 text-white' :
+                      idx === 1 ? 'bg-zinc-300 text-zinc-200' :
+                      idx === 2 ? 'bg-amber-600 text-white' : 'text-zinc-500 bg-[#27272a]'
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <span className="text-xs font-black text-zinc-100">{user.username}</span>
+                      <span className="text-[10px] text-zinc-400 block font-bold uppercase">Rank {idx + 1} Member</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-8 text-xs font-bold text-zinc-700">
+                    <div className="text-right">
+                      <span className="text-zinc-400 block text-[9px] uppercase font-extrabold tracking-wider">XP points</span>
+                      <span>{user.xp.toLocaleString()} XP</span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-zinc-400 block text-[9px] uppercase font-extrabold tracking-wider">Coins</span>
+                      <span className="text-amber-600">🪙 {user.coins.toLocaleString()}</span>
+                    </div>
+
+                    <div className="bg-[#121212] border border-zinc-800 rounded-lg px-2.5 py-1 text-center font-black">
+                      Lvl {user.level}
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-8 text-xs font-bold text-zinc-700">
-                  <div className="text-right">
-                    <span className="text-zinc-400 block text-[9px] uppercase font-extrabold tracking-wider">XP points</span>
-                    <span>{user.xp.toLocaleString()} XP</span>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-zinc-400 block text-[9px] uppercase font-extrabold tracking-wider">Coins</span>
-                    <span className="text-amber-600">🪙 {user.coins.toLocaleString()}</span>
-                  </div>
-
-                  <div className="bg-[#121212] border border-zinc-800 rounded-lg px-2.5 py-1 text-center font-black">
-                    Lvl {user.level}
-                  </div>
-                </div>
-              </div>
-            ))}
+              )))}
         </div>
       </div>
     </div>

@@ -362,7 +362,7 @@ export default function VerificationTab({ onAddLog }: VerificationTabProps) {
                   <ShieldAlert className="w-3.5 h-3.5" /> Hidden Admin / Staff Channels
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-normal">
-                  Remain 100% <strong>HIDDEN</strong> (`VIEW_CHANNEL: Denied`). Invisible to regular members & bots.
+                  Remain fully <strong>HIDDEN</strong> (`VIEW_CHANNEL: Denied`). Invisible to regular members & bots.
                 </p>
                 <span className="inline-block px-2 py-0.5 bg-rose-100/80 text-rose-800 text-[9px] font-black uppercase rounded">
                   🙈 HIDDEN PRESERVED

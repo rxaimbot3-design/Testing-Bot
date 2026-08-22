@@ -12,16 +12,16 @@ export function validateEnvironmentVariables(): EnvValidationResult {
   // 1. Critical Required Variables
   const token = (process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN)?.trim();
   if (!token) {
-    missingOptional.push('DISCORD_BOT_TOKEN');
-    warnings.push('⚠️ Warning: DISCORD_BOT_TOKEN is missing. Discord Bot will remain offline.');
+    missingRequired.push('DISCORD_BOT_TOKEN');
+    warnings.push('❌ Critical Error: DISCORD_BOT_TOKEN is missing. Discord Bot will remain offline.');
   }
 
   const adminSecret = process.env.ADMIN_SECRET?.trim();
   if (!adminSecret) {
-    missingOptional.push('ADMIN_SECRET'); process.env.ADMIN_SECRET = process.env.ADMIN_SECRET || "default_insecure_admin_secret_generated_for_safety_do_not_use";
+    missingRequired.push('ADMIN_SECRET');
     warnings.push('❌ Critical Error: ADMIN_SECRET is required and must be configured in environment.');
   } else if (adminSecret.length < 32) {
-    missingOptional.push('ADMIN_SECRET'); process.env.ADMIN_SECRET = process.env.ADMIN_SECRET || "default_insecure_admin_secret_generated_for_safety_do_not_use";
+    missingRequired.push('ADMIN_SECRET');
     warnings.push('❌ Critical Error: ADMIN_SECRET must be at least 32 characters long for enterprise security.');
   }
 
@@ -56,7 +56,7 @@ export function validateEnvironmentVariables(): EnvValidationResult {
   }
 
   if (!process.env.NODE_ENV) {
-    process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+    process.env.NODE_ENV = 'production';
   }
 
   const isValid = missingRequired.length === 0;

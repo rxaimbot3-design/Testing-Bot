@@ -17,7 +17,17 @@ import {
   Zap,
   Activity,
   UserCheck,
-  Music
+  Music,
+  AlertTriangle,
+  ShieldAlert,
+  Gauge,
+  Cpu,
+  BarChart3,
+  Bug,
+  FileText,
+  Users,
+  HardDrive,
+  Clock
 } from 'lucide-react';
 
 import OverviewTab from './components/OverviewTab';
@@ -33,6 +43,18 @@ import GitHubTab from './components/GitHubTab';
 import VerificationTab from './components/VerificationTab';
 import MusicPlayerTab from './components/MusicPlayerTab';
 import TopFiveFeaturesBar from './components/TopFiveFeaturesBar';
+import LiveSecurityEventsTab from './components/LiveSecurityEventsTab';
+import AttackTimelineTab from './components/AttackTimelineTab';
+import RiskScoreTab from './components/RiskScoreTab';
+import SystemHealthTab from './components/SystemHealthTab';
+import EventThroughputTab from './components/EventThroughputTab';
+import DetectionLatencyTab from './components/DetectionLatencyTab';
+import AuditLogsTab from './components/AuditLogsTab';
+import ErrorMonitoringTab from './components/ErrorMonitoringTab';
+import BackupStatusTab from './components/BackupStatusTab';
+import TrustSystemTab from './components/TrustSystemTab';
+import HealthCheck from './components/HealthCheck';
+import SecurityAlertsPanel from './components/SecurityAlertsPanel';
 import { parseMusicIntent } from './services/musicIntentService';
 import { apiFetch, checkSession, loginWithAdminKey, logoutAdmin, getAdminToken, loginWithDiscordToken } from './services/apiClient';
 
@@ -50,7 +72,18 @@ type DashboardTab =
   | 'settings' 
   | 'economy' 
   | 'discord-connect' 
-  | 'github';
+  | 'github'
+  | 'live-security'
+  | 'attack-timeline'
+  | 'risk-score'
+  | 'system-health'
+  | 'event-throughput'
+  | 'detection-latency'
+  | 'audit-logs'
+  | 'error-monitoring'
+  | 'backup-status'
+  | 'trust-system'
+  | 'security-alerts';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
@@ -124,6 +157,12 @@ export default function App() {
     latency: 0,
     status: 'online' as 'online' | 'offline' | 'lockdown'
   });
+
+  const [enterpriseStatus, setEnterpriseStatus] = useState<{
+    totalShards: number;
+    ping: number;
+    uptimeMinutes: number;
+  } | null>(null);
 
   const [adminAuthenticated, setAdminAuthenticated] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -226,9 +265,35 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    const fetchEnterprise = async () => {
+      try {
+        const res = await apiFetch('/api/enterprise/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (mounted && data) {
+          setEnterpriseStatus({
+            totalShards: data.gatewayCount || 1,
+            ping: data.gateways?.[0]?.ping || 0,
+            uptimeMinutes: data.gateways?.[0]?.uptimeMinutes || 0
+          });
+        }
+      } catch {
+        // Silent fail
+      }
+    };
+    fetchEnterprise();
+    const interval = setInterval(fetchEnterprise, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
-    { id: '1', time: new Date().toLocaleTimeString(), user: 'ClusterWorker-01', action: 'Auto Sharding Cluster Engine started. 4 shards active.', severity: 'low' },
+    { id: '1', time: new Date().toLocaleTimeString(), user: 'System', action: 'Security engine initialized.', severity: 'low' },
     { id: '2', time: new Date().toLocaleTimeString(), user: 'Gemini-AI', action: 'Google Search Live Grounding & Anti-Scam Shield online.', severity: 'low' },
     { id: '3', time: new Date().toLocaleTimeString(), user: 'SecurityCenter', action: 'Immutable audit trail cryptographically verified.', severity: 'low' }
   ]);
@@ -250,7 +315,7 @@ export default function App() {
   // Economy Leaderboard State
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
 
-  const handleAddLog = (action: string, severity: 'low' | 'medium' | 'high' = 'low') => {
+  const handleAddLog = (action: string, severity: 'low' | 'medium' | 'high' | 'critical' = 'low') => {
     const newEntry: AuditLog = {
       id: `log-${Date.now()}`,
       time: new Date().toLocaleTimeString(),
@@ -329,8 +394,19 @@ export default function App() {
     { id: 'aisystem', icon: Sparkles, label: 'AI System & Insights', category: 'INTELLIGENCE' },
     { id: 'music', icon: Music, label: 'AI Voice DJ & Music', category: 'ENTERTAINMENT' },
     { id: 'verification', icon: UserCheck, label: 'Verification System & CAPTCHA', category: 'SECURITY' },
-    { id: 'embeds', icon: Palette, label: 'Visual Embed Builder', category: 'BUILDER' },
     { id: 'security', icon: ShieldCheck, label: 'Security & Database Backup', category: 'PROTECTION' },
+    { id: 'live-security', icon: AlertTriangle, label: 'Live Security Events', category: 'MONITORING' },
+    { id: 'attack-timeline', icon: Activity, label: 'Attack Timeline', category: 'MONITORING' },
+    { id: 'risk-score', icon: Gauge, label: 'Risk Score', category: 'ANALYTICS' },
+    { id: 'system-health', icon: Cpu, label: 'System Health', category: 'MONITORING' },
+    { id: 'event-throughput', icon: BarChart3, label: 'Event Throughput', category: 'ANALYTICS' },
+    { id: 'detection-latency', icon: Clock, label: 'Detection Latency', category: 'ANALYTICS' },
+    { id: 'audit-logs', icon: FileText, label: 'Audit Logs', category: 'COMPLIANCE' },
+    { id: 'error-monitoring', icon: Bug, label: 'Error Monitoring', category: 'MONITORING' },
+    { id: 'backup-status', icon: HardDrive, label: 'Backup Status', category: 'OPERATIONS' },
+    { id: 'security-alerts', icon: ShieldAlert, label: 'Security Alerts', category: 'MONITORING' },
+    { id: 'trust-system', icon: Users, label: 'Trust System', category: 'SECURITY' },
+    { id: 'embeds', icon: Palette, label: 'Visual Embed Builder', category: 'BUILDER' },
     { id: 'tickets', icon: Ticket, label: 'Tickets & User Control', category: 'MANAGEMENT' },
     { id: 'billing', icon: Key, label: 'License Keys & Analytics', category: 'ENTERPRISE' },
     { id: 'settings', icon: Settings, label: 'Themes & Multi-Language', category: 'SYSTEM' },
@@ -439,12 +515,12 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-zinc-900/50 rounded-xl border border-zinc-800/50 text-xs font-bold text-zinc-400">
             <Activity className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Cluster Ping: 18ms</span>
+            <span>Gateway Ping: {enterpriseStatus?.ping ?? 0}ms</span>
           </div>
 
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            High Availability (4/4 Shards)
+             {enterpriseStatus?.totalShards ? `Single Instance (${enterpriseStatus.totalShards} Gateway${enterpriseStatus.totalShards !== 1 ? 's' : ''})` : 'Single Instance'}
           </span>
 
           {adminAuthenticated ? (
@@ -645,6 +721,50 @@ export default function App() {
               {activeTab === 'github' && (
                 <GitHubTab />
               )}
+
+              {activeTab === 'live-security' && (
+                <LiveSecurityEventsTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'attack-timeline' && (
+                <AttackTimelineTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'risk-score' && (
+                <RiskScoreTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'system-health' && (
+                <SystemHealthTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'event-throughput' && (
+                <EventThroughputTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'detection-latency' && (
+                <DetectionLatencyTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'audit-logs' && (
+                <AuditLogsTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'error-monitoring' && (
+                <ErrorMonitoringTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'backup-status' && (
+                <BackupStatusTab onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'security-alerts' && (
+                <SecurityAlertsPanel onAddLog={handleAddLog} />
+              )}
+
+              {activeTab === 'trust-system' && (
+                <TrustSystemTab onAddLog={handleAddLog} />
+              )}
             </motion.div>
           </AnimatePresence>
         </section>
@@ -653,7 +773,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-zinc-800/50 bg-[#09090b] py-4 text-center text-xs text-zinc-500 font-medium mt-auto" id="dashboard-footer">
-        © {new Date().getFullYear()} Enterprise Discord Bot Core Engine. High Availability & Multi-Tenant Architecture.
+        © {new Date().getFullYear()} Enterprise Discord Bot Core Engine. Single-Instance Deployment with Process Resilience.
       </footer>
     </div>
   );

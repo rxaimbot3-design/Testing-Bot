@@ -110,7 +110,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           </div>
           <div>
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Shield Status</span>
-            <span className="text-2xl font-black text-zinc-100">100% Secure</span>
+            <span className="text-2xl font-black text-zinc-100">Secured</span>
           </div>
         </div>
 
@@ -120,7 +120,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           </div>
           <div>
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Bot Latency</span>
-            <span className="text-2xl font-black text-zinc-100">{server.latency > 0 ? server.latency : 18}ms</span>
+            <span className="text-2xl font-black text-zinc-100">{(server.latency ?? 18)}ms</span>
           </div>
         </div>
       </div>
@@ -140,13 +140,13 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
                 </span>
               </h3>
               <p className="text-xs text-zinc-400">
-                bot-er latency ebong response speed 100% optimize kora hoyeche.
+                bot-er latency ebong response speed optimized kora hoyeche.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 bg-[#18181b] px-3 py-1.5 rounded-lg border border-zinc-800">
             <span className="text-[11px] font-bold text-zinc-400">Gateway Ping:</span>
-            <span className="text-sm font-black text-emerald-400">{server.latency > 0 ? server.latency : 16} ms</span>
+            <span className="text-sm font-black text-emerald-400">{(server.latency ?? 16)} ms</span>
             <span className="text-[10px] font-extrabold text-emerald-500/80 uppercase bg-emerald-500/10 px-1.5 py-0.5 rounded">Ultra-Fast</span>
           </div>
         </div>
@@ -162,7 +162,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           <div className="bg-[#18181b] p-3 rounded-lg border border-zinc-800/60">
             <span className="font-bold text-emerald-400 block mb-1">⚡ Multithreaded Engine</span>
             <p className="text-zinc-400 text-[11px] leading-relaxed">
-              Node.js libuv 128-threadpool & WebSocket packet compression enabled. All events execute sub-10ms.
+              Node.js libuv 128-threadpool & HTTP polling enabled. All events execute within measured latency.
             </p>
           </div>
 
@@ -208,10 +208,10 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
             <div>
               <div className="flex justify-between text-xs font-bold text-zinc-400 mb-1">
                 <span>API Connection State</span>
-                <span className="text-zinc-100">99.98% uptime</span>
+                <span className="text-zinc-100">Uptime monitoring</span>
               </div>
               <div className="w-full bg-[#27272a] h-2 rounded-full overflow-hidden">
-                <div className="bg-indigo-500 h-full w-[99.98%] rounded-full"></div>
+                <div className="bg-indigo-500 h-full w-full rounded-full"></div>
               </div>
             </div>
           </div>
@@ -219,7 +219,7 @@ export default function OverviewTab({ server, onToggleLockdown, logs, onRefreshL
           <div className="pt-4 border-t border-zinc-100">
             <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">⚡ Active Security & GOD AI Modules</h4>
             <div className="flex flex-wrap gap-1.5">
-              {['GOD AI Brain', '100/100 Anti-Nuke', 'RAID_DREAM', 'CODE_DOCTOR', 'VC_GOD', 'SALES_CLOSER', 'VIRAL_CONTENT', 'AI_JUDGE'].map((mod, idx) => (
+               {['GOD AI Brain', 'Anti-Nuke Shield', 'RAID_DREAM', 'CODE_DOCTOR', 'VC_GOD', 'SALES_CLOSER', 'VIRAL_CONTENT', 'AI_JUDGE'].map((mod, idx) => (
                 <span key={idx} className="text-[10px] font-black bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded-md border border-indigo-500/30">
                   👑 {mod}
                 </span>

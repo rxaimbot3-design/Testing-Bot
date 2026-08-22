@@ -1,6 +1,6 @@
 {
   "name": "Ultimate Discord AI Bot",
-  "description": "Enterprise-Grade Zero-Trust Discord AI Bot with AI Raid Prediction, 1-Click Snapshot & Restore, OAuth Malicious App Detection, and Real-time Security Analytics.",
+  "description": "Enterprise-Grade Zero-Trust Discord AI Bot with Statistical Raid Prediction, 1-Click Snapshot & Restore, OAuth Malicious App Detection, and Real-time Security Analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

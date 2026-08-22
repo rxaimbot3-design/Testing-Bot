@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run lint
+  
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run typecheck
+  
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run test:all
+  
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run security:scan
+
+  native-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: apt-get update && apt-get install -y --no-install-recommends python3 build-essential pkg-config libssl-dev
+      - run: npm ci
+      - run: npm run build:native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-engine-native
+          path: build/Release/security_engine.node
+          retention-days: 7
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, security-scan, native-build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run build
+
+  production-start-test:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run build
+      - run: node server-build/server.mjs &
+      - run: sleep 5 && curl -f http://localhost:3000/api/health
+      - run: curl -s http://localhost:3000/api/health | grep -q '"nativeLoaded":true' || (echo 'Native engine not loaded' && exit 1)
+      - run: kill %1 || true

@@ -1,6 +1,7 @@
 node_modules/
 build/
 dist/
+server-build/
 coverage/
 .DS_Store
 *.log
@@ -12,4 +13,10 @@ admin_sessions.json
 admin_whitelist.json
 ip_bans.json
 admin_secret.txt
+admin_audit.json
+discord_config.json
+backups/
+snapshots/
+data/
+logs/
 

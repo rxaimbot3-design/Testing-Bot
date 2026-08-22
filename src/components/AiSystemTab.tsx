@@ -113,7 +113,6 @@ export default function AiSystemTab({ messages, isGenerating, onSendMessage }: A
               { cmd: '[MODE: SALES_CLOSER] INPUT: Customer: "Bhai bot er dam koto ar feature ki?" Product: $14.99/mo Anti-Nuke', label: '💰 SALES_CLOSER', desc: '2-line soft sales closer.' },
               { cmd: '[MODE: VIRAL_CONTENT] INPUT: Topic: Gaming & Anti-Nuke Security', label: '🔥 VIRAL_CONTENT', desc: '1 Poll + 1 Meme + 1 Event idea.' },
               { cmd: '[MODE: AI_JUDGE] INPUT: Report: User X nuked channels Evidence: Audit logs deleted 5 channels', label: '⚖️ AI_JUDGE', desc: 'Judge guilty user + punishment.' },
-              { cmd: '/ask How to setup 100/100 Zero Trust protection on EXCLUSIVE server?', label: '🗣️ /ask', desc: 'Ask anything to God AI Brain.' },
             ].map((btn, idx) => (
               <button
                 key={idx}

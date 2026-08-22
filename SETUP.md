@@ -1,6 +1,6 @@
 # 🛡️ Ultimate Discord AI Bot - Enterprise Installation & Setup Guide
 
-Welcome to the **Ultimate Discord AI Bot** setup guide. This enterprise-grade Discord bot features military-grade **Zero Trust Anti-Nuke Shield**, **Real-Time AI Auto-Moderation (powered by Google Gemini)**, **C++ Native High-Frequency Security Engine**, and a **Live Interactive Web Control Dashboard**.
+Welcome to the **Ultimate Discord AI Bot** setup guide. This enterprise-grade Discord bot features **Zero Trust Anti-Nuke Shield**, **Real-Time AI Auto-Moderation (powered by Google Gemini)**, **C++ Native High-Frequency Security Engine**, and a **Live Interactive Web Control Dashboard**.
 
 ---
 
@@ -42,10 +42,13 @@ GEMINI_API_KEY="your_gemini_api_key_here"
 PORT=3000
 NODE_ENV="development"
 APP_URL="http://localhost:3000"
+ADMIN_SECRET="minimum_32_character_ultra_secure_admin_secret_key"
 
 # 5. GitHub Integration (Optional)
 GITHUB_TOKEN="your_github_personal_access_token_here"
 ```
+
+**CRITICAL**: `ADMIN_SECRET` must be at least 32 characters. The server will refuse to start without a valid `ADMIN_SECRET`. Do not commit this value to version control. Use your hosting provider's environment secrets (Railway Variables, Render Environment, Docker secrets, etc.).
 
 ---
 
@@ -77,7 +80,7 @@ https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=8&
 ### 1. Install Dependencies
 
 ```bash
-npm install
+npm ci
 ```
 
 ### 2. Run in Development Mode
@@ -97,6 +100,13 @@ npm run build
 # Start production server
 npm start
 ```
+
+### 4. Production Deployment Checklist
+
+- Set `ADMIN_SECRET` (32+ chars) in your hosting provider's environment variables.
+- Set `ALLOWED_ORIGIN` or `APP_URL` to your dashboard domain for CORS restriction.
+- Enable Privileged Gateway Intents in Discord Developer Portal.
+- Run with `node server-build/server.mjs` (do NOT run `server.ts` directly in production).
 
 ---
 
